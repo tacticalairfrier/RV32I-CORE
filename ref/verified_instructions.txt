@@ -1,0 +1,11 @@
+lui
+addi
+add
+xor
+sub
+and
+or
+sw
+sb
+sh
+xori
