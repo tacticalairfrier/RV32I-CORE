@@ -20,9 +20,9 @@ module memory(
 reg [7:0] ins_mem [0:4095];
 reg [7:0] dat_mem [0:4095];
 //putting the firmware inside the ins_mem
-//ts not possible in asic onli for da yosys/vivado
+//not possible in asic only for yosys/vivado
 initial begin
-    //readmemh 
+    //readmemh for firmware
     $readmemh("firmware.hex", ins_mem);
 end
 always@(posedge clkin)begin
