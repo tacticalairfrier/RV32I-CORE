@@ -7,8 +7,9 @@ module alu(
     input wire [3:0] opcode,
     output reg [31:0] result,
     //flags C,Z,N,O -> negitive, overflow
-    output reg [1:0] flags, 
+    output reg [1:0] flags
 );
+/* verilator lint_off CASEINCOMPLETE */
 //assign the opcodes using localparams
 //keeping the related operations close by in the opcode to save on the decode logic
 //list of possible actions here
@@ -18,20 +19,19 @@ module alu(
 // slt, sltu, equality
 // xor or and 
 // total of 11 opc
-localparam 
-//keeping the shifters and equality with leading 1
-SLL = 4'h8,
+localparam SLL = 4'h8,
 SRR = 4'h9,
 SRA = 4'ha,
 EQL = 4'hb,
 SLT = 4'hc,
-SLTU = 4'hd
+SLTU = 4'hd,
 ADD = 4'h7,
 SUB = 4'h6,
 AND = 4'h5, 
 OR = 4'h4,
 XOR = 4'h3;
 always@(*)begin
+    result = 32'h00000000;
     flags = 2'b00;
     case(opcode)
     //unsigned operations arent negitive/positive i.e bitwise so no allocation to them
