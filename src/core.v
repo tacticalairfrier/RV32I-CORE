@@ -13,23 +13,334 @@ module core(
     );
     //5 Stages of the classic risc pipeline taken as states in an fsm
     localparam FETCH = 3'd0, DECODE = 3'd1, EXECUTE = 3'd2, MEMORY = 3'd3, WRITEBACK = 3'D4;
+    ///localparam for opcodes of the alu
+    localparam SLL = 4'h8, SRR = 4'h9, SRA = 4'ha, EQL = 4'hb, SLT = 4'hc, SLTU = 4'hd, ADD = 4'h7, SUB = 4'h6, AND = 4'h5, OR = 4'h4, XOR = 4'h3;
+    //localparams for the riscv standard opcodes
+    localparam LUI = 7'h37, AUIPC = 7'h17, JAL = 7'h6f, JALR = 7'h67, BRANCH = 7'h63, LOAD = 7'h03, STORE = 7'h23, ARM_IMM = 7'h13, ARM_RR = 7'h33, FEN = 7'h0f, EC = 7'h73;
     //fsm operator regs
     //alu oper_a is always rs1, and oper_b is always rs2
     //the registerfile for the core, 32 bits wide, 31 deep 0x0 will be tied to 0
     reg [31:0] registerfile [0:31];
-    reg [31:0] program_counter;
+    reg [31:0] program_counter, next_program_counter;
+    reg [31:0] A, B;
     //memory interface
-    reg [31:0] address_inst, address_dat, data_word;
+    reg [31:0] address_dat, data_word;
     //alu
-    reg [31:0] a_rs1, b_rs2;
-    wire [31:0] result;
-    reg [3:0] opcode;
-    reg [2:0] state;
-    wire [1:0] flags
+    reg [31:0] instword;
+    reg [31:0] alu_a, alu_b;
+    reg [3:0] opcode, OPC;
+    reg [2:0] state, nextstate;
     reg data_rw;
+    //a nop reg, when its high the instruction is supposed to be a nop
+    reg nop;
     //wire nettypes
-    wire [31:0] instword, datword;
+    wire [31:0] curr_inst, datword;
+    wire [31:0] result;
+    wire [1:0] flags;
     // the outside world's window into the cpu
     assign state_out = state;
+    //to be removed 
+    registerile[0] = 31'h0;
+    //initialising the modules 
+    memory MEM_0 (
+        //directly linking the program counter to the memory
+        .address_inst(program_counter),
+        .address_dat(address_dat),
+        .datawordin(data_word),
+        .clkin(clkin),
+        .dat_rw(data_rw),
+        .instword(curr_inst),
+        .datwordout(data_word)
+    );
+    alu ALU_0 (
+        .oper_a(alu_a),
+        .oper_b(alu_b),
+        .opcode(opcode),
+        .result(result),
+        .flags(flags)
+    );
+    //fsm
+    always@(posedge clkin)begin
+        if(!reset)begin
+            program_counter <= 32'h0;
+            a_rs1 <= 32'h0;
+            b_rs2 <= 32'h0;
+            state <= FETCH;
+            data_rw <=  FALSE;
+        end
+        else begin
+            state <= nextstate;
+            program_counter <= next_program_counter;
+        end
+    end
+    always@(*)begin
+        if(!reset)begin
+            nextstate = FETCH;
+            instword = 32'00000000;
+            //nextprogramcounter points at 4, will need to chck this logic
+            next_program_counter = 4;
+            nop = `FALSE;
+        end
+        else begin
+            case(state)
+            FETCH:begin 
+                nextstate = DECODE;
+                instword = curr_inst;
+                end
+            DECODE:begin
+                //decoder puts the feilds into correct thing
+                nextstate = EXECUTE;
+                //default nextstae is execute 
+                case(instword[6:0])
+                //lui
+                LUI: begin
+                    //LUI GOES DIRECTLY TO WRITEBACK
+                    //pc+4 calculation
+                    A = program_counter
+                    B = 4;
+                    OPC = ADD;
+                    nextstate = WRITEBACK;
+                    //lui can directly go to the memory as the
+                end
+                AUIPC: nextstate = EXECUTE;
+                JAL: begin
+                    A = {{11{instword[31]}}, instword[31], instword[30], instword[30:21], instword[20], instword[19:12]};
+                    B = program_counter;
+                    OPC = ADD;
+                end
+                JALR: begin
+                    A = registerfile[instword[19:15]];
+                    B = {{20{instword[31]}}, instword[31:20]};
+                    OPC = ADD;
+                end
+                BRANCH: begin
+                    // a and b are rs1 and rs2 rspectively using r-type instruction format
+                    A = registerfile[instword[19:15]];
+                    B = registerfile[instword[24:20]];
+                    case(instword[14:12])
+                    //beq -> take the branch if equal to 
+                    3'h0: OPC = EQL;
+                    //bne -> take the branch if not equal
+                    3'h1: OPC = EQL;
+                    //blt -> take the branch if rs1 is less than rs2 in a signed comparison
+                    3'h4: OPC = SLT;
+                    //bge -> take the branch if rs1 is greater than rs2 using a signed comparison
+                    3'h5: OPC = SLT;
+                    //bltu -> take the branch is rs1 is less than rs2 using unsigned comparison
+                    3'h6: OPC = SLTU;
+                    //bgeu -> take the branch if rs1 is greater than rs2 using an unsigned comparison
+                    3'h7: OPC = SLTU;
+                    endcase
+                end
+                LOAD: begin
+                    //A is the rs1 and b is the immediate instruction field using i-type field
+                    A = registerfile[instword[19:15]];
+                    B = {{20{instword[31]}}, instword[31:20]}; //sign-extended
+                    //not taking f3 field here as its always going to be an add instruction
+                    OPC =  ADD;
+                    nextstate = WRITEBACK;
+                    //THE logic for fetching from memory comes in the decode phase
+                end
+                STORE: begin
+                    //decode for the s-type instruction
+                    A = registerfile[instword[19:15]];
+                    B = {{20{instword[31]}} ,instword[31:25], instword[11:7]};
+                    OPC = ADD;
+                    nextstate = MEMORY;
+                end
+                ARM_IMM: begin
+                    //all immediate arithemetic operations to be decoded HERE
+                    //since my alu only takes the last 5 bits, no need to separately decode b 
+                    //for shift operations
+                    A = registerfile[instword[19:15]];
+                    B = {{20{instword[31]}}, instword[31:20]};
+                    case(instword[14:12])
+                        ///case block is just useful for setting the opcode
+                        3'h0: ADD;
+                        3'h2: SLT;
+                        3'h3: SLTU;
+                        3'h4: XOR;
+                        3'h6: OR;
+                        3'h7: SLL;
+                        3'h1: begin
+                            //F7 decoding into opcode
+                            if(instword[31:25] == 7'h00) OPC = SRR;
+                            else if(instword[31:25] == 7'h20) OPC = SRA;
+                        end
+                    endcase
+                end
+                ARM_RR: begin
+                    //a and b both are register to register types i.e r-type instructions
+                    A = registerfile[instword[19:15]];
+                    B = registerfile[instword[24:20]];
+                    case(instword[14:12])
+                    3'h0:begin
+                        if(instword[31:25] == 7'h00) OPC = ADD;
+                        else if(instword{31:25} == 7'h20) OPC = SUB;
+                    end
+                    3'h1: OPC = SLL;
+                    3'h2: OPC = SLT;
+                    3'h3: OPC = SLTU;
+                    3'h4: OPC = XOR;
+                    3'h5: begin
+                        if(instword[31:25] == 7'h00) OPC = SRR;
+                        else if(instword[31:25] == 7'h20) OPC = SRA;
+                    end
+                    3'h6: OPC = OR;
+                    3'h7: OPC = AND;
+                    endcase
+                end
+                //fence and fence.tso instructions will be decoded but they do 
+                //absolutely nothing so treating as nop
+                FEN: nop = `TRUE;
+                EC: nop = `TRUE;
+                endcase
+                //raises the nop flag when all are zero
+                if(instword == 32'b00000000) nop = `TRUE;
+                //first use of alu done right after the decode state
+                alu_a = A;
+                alu_b = B;
+                opcode = OPC;
+            end
+            EXECUTE:begin
+                //first part of execute will be that this guy takes the A,B AND OPC and feeds it into the alu
+                //states can be skipped
+                //the important constraint of the multicycle approach is to use the alu exactly once per state
+                //as long as a b and opcode are kept the same, the result will be same
+                case(instword[6:0])
+                    AUIPC:begin
+                        //go to writeback, needed there
+                        A = program_counter;
+                        B = 4;
+                        OPC = ADD;
+                        nextstate = WRITEBACK;
+                    end
+                    JAL:begin
+                        //nextprogramcounter stores the result 
+                        next_program_counter = result;
+                        A = program_counter;
+                        B = 4;
+                        OPC = ADD;
+                        //writeback for writing pc+4 into the thing
+                        nextstate = WRITEBACK;
+                    end
+                    JALR:begin
+                        //removed the last 0 and put the values in the a,b, opc register
+                        next_program_counter = {result[31:1], `FALSE};
+                        A = program_counter;
+                        B = 4;
+                        OPC = ADD;
+                        nextstate = WRITEBACK;
+                    end
+                    BRANCH:begin
+                        if(instword[14:12] == 3'h0 || instword[14:12] == 3'h4 || instword[14:12] == 3'h6)begin
+                            //for all true conditions -> beq, blt, bltu
+                            if(result[1]) begin
+                                A = program_counter;
+                                //b is the offset to be added to the programcounter
+                                B = {{19{instword[31]}} ,instword[31], instword[7], instword[30:25], instword[11:8], `FALSE};
+                                opcode = ADD;
+                            end
+                            else begin
+                                A = program_counter;
+                                B = 4;
+                                OPC = ADD;
+                            end
+                        end
+                        else begin
+                            //for all false conditions -> bne, bge, bgeu
+                            if(!result[1]) begin
+                                A = program_counter;
+                                //b is the offset to be added to the programcounter
+                                B = {{19{instword[31]}} ,instword[31], instword[7], instword[30:25], instword[11:8], `FALSE};
+                                opcode = ADD;
+                                end
+                            else begin
+                                A = program_counter;
+                                B = 4;
+                                OPC = ADD;
+                            end
+                        end
+                        nextstate = FETCH;
+                    end
+                    // LOAD:begin
+                    //     //load doesnt need an alu or enter the execute statae
+                    //     nextstate = MEMORY;
+                    // end
+                    // STORE:begin
+                    //     nextstate = MEMORY;
+                    // end
+                    ARM_IMM:begin
+                        nextstate = WRITEBACK;
+                    end
+                    ARM_RR:begin
+                        nextsttate = WRITEBACK;
+                    end
+                    FEN:begin
+                        //treating fence as an nop here
+                        nextstate = FETCH;
+                    end
+                    EC:begin
+                        //calling ecall as an nop here 
+                        //will need to add some functionality
+                        nextstate = FETCH;
+                    end
+                    //second use of the alu
+                endcase
+                //Initial part of decode is done 
+                //some operations need the alu more than once i.e first for shifting to the left and then calculating the rd 
+                //program counter next updated here
+                // nextstate = MEMORY;
+                //if the nop flag is high, then program counter is updated and the fsm is sent to fetch
+                //nop takes direct control of the alu in order to land on the new state
+                if(nop)begin
+                    alu_a = program_counter;
+                    alu_b = 4;
+                    opcode = ADD;
+                    nextstate = FETCH;
+                end
+                else begin
+                    //the alu is passed the newly computed values of the registers A, B and OPC
+                    alu_a = A;
+                    alu_b = B;
+                    opcode = OPC;
+                    //updating the nextprogramcounter
+                end
+                //the calculation done in the execute cycle will most likely be for the program counter
+                next_program_counter = result;
+            end
+            MEMORY:begin
+                //all memory acctions are done in the fsm,
+                //nothing here
+                //memory cant be read from or written to from any other block
+                nextstate = WRITEBACK;
+            end
+            WRITEBACK:begin
+                //alu use will not happen in the writeback and memory state
+                nextstate = FETCH;
+                case(instword[6:0])
+                    LUI: begin
+                        //lui path fetch -> decode ->writeback
+                        registerfile[instword[11:7]] = {instword[31:12], 12'h000};
+                        next_program_counter = result;
+                    end
+                    AUIPC: registerfile[instword[11:7]] = {instword[31:12], 12'h000};
+                    JAL: registerfile[instword[11:7]] = result;
+                    JALR: registerfile[instword[11:7]] = result;
 
+                endcase
+                //registerfile always stays asynchronous
+                //IN this stage only can the registerfile be written
+                //the registerfile can be read in any other states
+                //this is just for WRITING on the registerfile
+                //purely for calculating the value of the nextprogrammcounter
+                
+                // alu_a = A;
+                // alu_b = B;
+                // opcode = OPC;
+                // next_program_counter = result;
+            end
+            endcase
+        end
+        end
 endmodule
