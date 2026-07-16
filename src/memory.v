@@ -10,8 +10,8 @@ module memory(
     input wire [31:0] address_inst,
     input wire [31:0] address_dat,
     input wire [31:0] datawordin,
+    input wire [1:0] dat_rw,
     input wire clkin,
-    input wire dat_rw,
     output reg [31:0] instword,
     output reg [31:0] datwordout
 );
@@ -31,8 +31,9 @@ always@(posedge clkin)begin
     instword <= {ins_mem[address_inst+3], ins_mem[address_inst+2], ins_mem[address_inst+1], ins_mem[address_inst]};
     //dat_rw data given as is
     //rw = 1 means write requested
-    if(dat_rw) {dat_mem[address_dat+3], dat_mem[address_dat+2], dat_mem[address_dat+1], dat_mem[address_dat]} <= datawordin;
-    else datwordout <= {dat_mem[address_dat+3], dat_mem[address_dat+2], dat_mem[address_dat+1], dat_mem[address_dat]};
+    if(dat_rw == 2'b01) {dat_mem[address_dat+3], dat_mem[address_dat+2], dat_mem[address_dat+1], dat_mem[address_dat]} <= datawordin; //write
+    else if(dat_rw == 2'b10) datwordout <= {dat_mem[address_dat+3], dat_mem[address_dat+2], dat_mem[address_dat+1], dat_mem[address_dat]}; //read
+    else datwordout <= 32'h000000000;
     //rw = 0 means read requested
 end
 endmodule

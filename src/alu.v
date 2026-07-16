@@ -9,6 +9,8 @@ module alu(
     //flags C,Z,N,O -> negitive, overflow
     output reg [1:0] flags
 );
+/* verilator lint_off WIDTHEXPAND */
+/* verilator lint_off EOFNEWLINE */
 /* verilator lint_off CASEINCOMPLETE */
 //assign the opcodes using localparams
 //keeping the related operations close by in the opcode to save on the decode logic

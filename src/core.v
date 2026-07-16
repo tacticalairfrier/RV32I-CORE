@@ -3,13 +3,15 @@
 `define TRUE 1'b1
 `define FALSE 1'b0
 //core module here
-
 module core(
+    /* verilator lint_off WIDTHEXPAND */
+    /* verilator lint_off EOFNEWLINE */
+    /* verilator lint_off CASEINCOMPLETE */
     //debug inst
     input wire clkin, reset,
     //debug outputs
-    output wire [2:0] state_out;
-    output wire [1:0] flags;
+    output wire [2:0] state_out,
+    output wire [1:0] flags
     );
     //5 Stages of the classic risc pipeline taken as states in an fsm
     localparam FETCH = 3'd0, DECODE = 3'd1, EXECUTE = 3'd2, MEMORY = 3'd3, WRITEBACK = 3'D4;
@@ -30,17 +32,15 @@ module core(
     reg [31:0] alu_a, alu_b;
     reg [3:0] opcode, OPC;
     reg [2:0] state, nextstate;
-    reg data_rw;
+    reg [1:0] data_rw;
     //a nop reg, when its high the instruction is supposed to be a nop
     reg nop;
     //wire nettypes
     wire [31:0] curr_inst, datword;
     wire [31:0] result;
-    wire [1:0] flags;
     // the outside world's window into the cpu
     assign state_out = state;
     //to be removed 
-    registerile[0] = 31'h0;
     //initialising the modules 
     memory MEM_0 (
         //directly linking the program counter to the memory
@@ -63,20 +63,23 @@ module core(
     always@(posedge clkin)begin
         if(!reset)begin
             program_counter <= 32'h0;
-            a_rs1 <= 32'h0;
-            b_rs2 <= 32'h0;
             state <= FETCH;
-            data_rw <=  FALSE;
         end
         else begin
             state <= nextstate;
             program_counter <= next_program_counter;
+            //simple thing done here, the result for memory must only be the memory address
+            if(nextstate == MEMORY)begin
+                address_dat <= result;
+            end
         end
     end
     always@(*)begin
+        data_rw = 2'b00;
+        registerfile [0] = 32'h0;
         if(!reset)begin
             nextstate = FETCH;
-            instword = 32'00000000;
+            instword = 32'h00000000;
             //nextprogramcounter points at 4, will need to chck this logic
             next_program_counter = 4;
             nop = `FALSE;
@@ -96,7 +99,7 @@ module core(
                 LUI: begin
                     //LUI GOES DIRECTLY TO WRITEBACK
                     //pc+4 calculation
-                    A = program_counter
+                    A = program_counter;
                     B = 4;
                     OPC = ADD;
                     nextstate = WRITEBACK;
@@ -132,16 +135,20 @@ module core(
                     3'h7: OPC = SLTU;
                     endcase
                 end
+                //only load and store are allowed to take the fsm into memory
                 LOAD: begin
+                    //data rw is true because ur loading data inside
+                    data_rw = 2'b10;
                     //A is the rs1 and b is the immediate instruction field using i-type field
                     A = registerfile[instword[19:15]];
                     B = {{20{instword[31]}}, instword[31:20]}; //sign-extended
                     //not taking f3 field here as its always going to be an add instruction
                     OPC =  ADD;
-                    nextstate = WRITEBACK;
+                    nextstate = MEMORY;
                     //THE logic for fetching from memory comes in the decode phase
                 end
                 STORE: begin
+                    data_rw = 2'b01;
                     //decode for the s-type instruction
                     A = registerfile[instword[19:15]];
                     B = {{20{instword[31]}} ,instword[31:25], instword[11:7]};
@@ -156,12 +163,12 @@ module core(
                     B = {{20{instword[31]}}, instword[31:20]};
                     case(instword[14:12])
                         ///case block is just useful for setting the opcode
-                        3'h0: ADD;
-                        3'h2: SLT;
-                        3'h3: SLTU;
-                        3'h4: XOR;
-                        3'h6: OR;
-                        3'h7: SLL;
+                        3'h0: OPC = ADD;
+                        3'h2: OPC = SLT;
+                        3'h3: OPC = SLTU;
+                        3'h4: OPC = XOR;
+                        3'h6: OPC = OR;
+                        3'h7: OPC = SLL;
                         3'h1: begin
                             //F7 decoding into opcode
                             if(instword[31:25] == 7'h00) OPC = SRR;
@@ -176,7 +183,7 @@ module core(
                     case(instword[14:12])
                     3'h0:begin
                         if(instword[31:25] == 7'h00) OPC = ADD;
-                        else if(instword{31:25} == 7'h20) OPC = SUB;
+                        else if(instword[31:25] == 7'h20) OPC = SUB;
                     end
                     3'h1: OPC = SLL;
                     3'h2: OPC = SLT;
@@ -263,18 +270,11 @@ module core(
                         end
                         nextstate = FETCH;
                     end
-                    // LOAD:begin
-                    //     //load doesnt need an alu or enter the execute statae
-                    //     nextstate = MEMORY;
-                    // end
-                    // STORE:begin
-                    //     nextstate = MEMORY;
-                    // end
                     ARM_IMM:begin
                         nextstate = WRITEBACK;
                     end
                     ARM_RR:begin
-                        nextsttate = WRITEBACK;
+                        nextstate = WRITEBACK;
                     end
                     FEN:begin
                         //treating fence as an nop here
@@ -314,6 +314,11 @@ module core(
                 //nothing here
                 //memory cant be read from or written to from any other block
                 nextstate = WRITEBACK;
+                //handling only 2 states coz only 2 states can bring here
+                alu_a = program_counter;
+                alu_b = 4;
+                opcode = ADD;
+                next_program_counter = result;
             end
             WRITEBACK:begin
                 //alu use will not happen in the writeback and memory state
@@ -327,7 +332,15 @@ module core(
                     AUIPC: registerfile[instword[11:7]] = {instword[31:12], 12'h000};
                     JAL: registerfile[instword[11:7]] = result;
                     JALR: registerfile[instword[11:7]] = result;
-
+                    LOAD: begin
+                        case(instword[14:12])
+                        3'h0: registerfile[instword[11:7]] = {{24{data_word[7]}}, data_word[7:0]};
+                        3'h1: registerfile[instword[11:7]] = {{16{data_word[15]}}, data_word[15:0]};
+                        3'h2: registerfile[instword[11:7]] = data_word;
+                        3'h4: registerfile[instword[11:7]] = {24'h000000, data_word[7:0]};
+                        3'h5: registerfile[instword[11:7]] = {16'h000000, data_word[7:0]};
+                        endcase
+                    end
                 endcase
                 //registerfile always stays asynchronous
                 //IN this stage only can the registerfile be written
