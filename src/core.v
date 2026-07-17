@@ -273,9 +273,9 @@ module core(
                     end 
                     STORE:begin
                         //case statement
-                        address_dat = result;
+                        address_dat = result; /// latch needed, 
                         case(instword[14:12])
-                        3'h0:data_word_IN = {24'h000000, registerfile[instword[24:20]][7:0]};
+                        3'h0:data_word_IN = {24'h000000, registerfile[instword[24:20]][7:0]}; //latch needed
                         3'h1:data_word_IN = {16'h0000, registerfile[instword[24:20]][15:0]};
                         3'h2:data_word_IN = registerfile[instword[24:20]];
                         endcase
@@ -365,12 +365,6 @@ module core(
                 //IN this stage only can the registerfile be written
                 //the registerfile can be read in any other states
                 //this is just for WRITING on the registerfile
-                //purely for calculating the value of the nextprogrammcounter
-                
-                // alu_a = A;
-                // alu_b = B;
-                // opcode = OPC;
-                // next_program_counter = result;
             end
             endcase
         end
