@@ -24,7 +24,7 @@ module core(
     //the registerfile for the core, 32 bits wide, 31 deep 0x0 will be tied to 0
     reg [31:0] registerfile [0:31];
     reg [31:0] program_counter, next_program_counter;
-    reg [31:0] A, B;
+    reg [31:0] A, B, result;
     //memory interface
     reg [31:0] address_dat, data_word_IN;
     //alu
@@ -37,7 +37,7 @@ module core(
     reg nop;
     //wire nettypes
     wire [31:0] curr_inst, data_word_OUT;
-    wire [31:0] result;
+    wire [31:0] result_alu;
     // the outside world's window into the cpu
     assign state_out = state;
     //to be removed 
@@ -56,7 +56,7 @@ module core(
         .oper_a(alu_a),
         .oper_b(alu_b),
         .opcode(opcode),
-        .result(result),
+        .result(result_alu),
         .flags(flags)
     );
     //fsm
@@ -67,11 +67,14 @@ module core(
             instword <= 32'h00000000;
         end
         else begin
-            if(state==FETCH) begin
-                instword <= curr_inst;
-            end
             state <= nextstate;
             program_counter <= next_program_counter;
+            result <= result_alu;
+            if(state==FETCH) begin
+                instword <= curr_inst;
+                //check the pc and pc latched logic
+                // pc_latched <= program_counter;
+            end 
             //simple thing done here, the result for memory must only be the memory address
         end
     end
@@ -83,13 +86,11 @@ module core(
         alu_a = 32'h00000000;
         alu_b = 32'h00000000;
         opcode = ADD;
-        nop = `FALSE;
         nextstate = state;
-        data_rw = 2'b00;
         registerfile [0] = 32'h00000000;
         next_program_counter = program_counter;
         if(!reset)begin
-            nextstate = FETCH;
+            nextstate = DECODE;
             //nextprogramcounter points at 4, will need to chck this logic
             next_program_counter = 4;
             nop = `FALSE;
@@ -115,13 +116,12 @@ module core(
                     //lui can directly go to the memory as the
                 end
                 AUIPC:begin
-                    nextstate = WRITEBACK;
-                    A = {instword[31:12], 12'h000};
-                    B = program_counter;
+                    A = program_counter;
+                    B = 4;
                     OPC = ADD;
                 end 
                 JAL: begin
-                    A = {{11{instword[31]}}, instword[31], instword[30], instword[30:21], instword[20], instword[19:12]};
+                    A = {{11{instword[31]}}, instword[31], instword[30], instword[30:21], instword[20], instword[19:12], `FALSE};
                     B = program_counter;
                     OPC = ADD;
                 end
@@ -162,7 +162,7 @@ module core(
                     //THE logic for fetching from memory comes in the decode phase
                 end
                 STORE: begin
-                    data_rw = 2'b01;
+                    data_rw = 2'b01; ///latch
                     //decode for the s-type instruction
                     A = registerfile[instword[19:15]];
                     B = {{20{instword[31]}} ,instword[31:25], instword[11:7]};
@@ -173,45 +173,15 @@ module core(
                     //all immediate arithemetic operations to be decoded HERE
                     //since my alu only takes the last 5 bits, no need to separately decode b 
                     //for shift operations
-                    A = registerfile[instword[19:15]];
-                    B = {{20{instword[31]}}, instword[31:20]};
-                    case(instword[14:12])
-                        ///case block is just useful for setting the opcode
-                        3'h0: OPC = ADD;
-                        3'h2: OPC = SLT;
-                        3'h3: OPC = SLTU;
-                        3'h4: OPC = XOR;
-                        3'h6: OPC = OR;
-                        3'h7: OPC = SLL;
-                        3'h1: begin
-                            //F7 decoding into opcode
-                            if(instword[31:25] == 7'h00) OPC = SRR;
-                            else if(instword[31:25] == 7'h20) OPC = SRA;
-                        end
-                    endcase
-                    nextstate = WRITEBACK;
+                    A =  program_counter;
+                    B = 4;
+                    OPC = ADD;
                 end
                 ARM_RR: begin
                     //a and b both are register to register types i.e r-type instructions
-                    A = registerfile[instword[19:15]];
-                    B = registerfile[instword[24:20]];
-                    case(instword[14:12])
-                    3'h0:begin
-                        if(instword[31:25] == 7'h00) OPC = ADD;
-                        else if(instword[31:25] == 7'h20) OPC = SUB;
-                    end
-                    3'h1: OPC = SLL;
-                    3'h2: OPC = SLT;
-                    3'h3: OPC = SLTU;
-                    3'h4: OPC = XOR;
-                    3'h5: begin
-                        if(instword[31:25] == 7'h00) OPC = SRR;
-                        else if(instword[31:25] == 7'h20) OPC = SRA;
-                    end
-                    3'h6: OPC = OR;
-                    3'h7: OPC = AND;
-                    endcase
-                    nextstate = WRITEBACK;
+                    A =  program_counter;
+                    B = 4;
+                    OPC = ADD;
                 end
                 //fence and fence.tso instructions will be decoded but they do 
                 //absolutely nothing so treating as nop
@@ -230,21 +200,25 @@ module core(
                 A = program_counter;
                 B = 4;
                 OPC = ADD;
+                nextstate = WRITEBACK;
                 //first part of execute will be that this guy takes the A,B AND OPC and feeds it into the alu
                 //states can be skipped
                 //the important constraint of the multicycle approach is to use the alu exactly once per state
                 //as long as a b and opcode are kept the same, the result will be same
                 case(instword[6:0])
+                    AUIPC: begin
+                        next_program_counter = result;
+                        A = {instword[31:12], 12'h000};
+                        B = program_counter;
+                    end
                     JAL:begin
                         //nextprogramcounter stores the result 
                         next_program_counter = result;
                         //writeback for writing pc+4 into the thing
-                        nextstate = WRITEBACK;
                     end
                     JALR:begin
                         //removed the last 0 and put the values in the a,b, opc register
                         next_program_counter = {result[31:1], `FALSE};
-                        nextstate = WRITEBACK;
                     end
                     BRANCH:begin
                         if(instword[14:12] == 3'h0 || instword[14:12] == 3'h4 || instword[14:12] == 3'h6)begin
@@ -253,7 +227,6 @@ module core(
                                 A = program_counter;
                                 //b is the offset to be added to the programcounter
                                 B = {{19{instword[31]}} ,instword[31], instword[7], instword[30:25], instword[11:8], `FALSE};
-                                OPC = ADD;
                             end
                         end
                         else begin
@@ -262,14 +235,13 @@ module core(
                                 A = program_counter;
                                 //b is the offset to be added to the programcounter
                                 B = {{19{instword[31]}} ,instword[31], instword[7], instword[30:25], instword[11:8], `FALSE};
-                                OPC = ADD;
                             end
                         end
-                        nextstate = FETCH;
                     end
                     LOAD:begin
-                       nextstate = MEMORY;
-                       address_dat = result;
+                        next_program_counter = result;
+                        nextstate = MEMORY;
+                        address_dat = result;
                     end 
                     STORE:begin
                         //case statement
@@ -280,6 +252,48 @@ module core(
                         3'h2:data_word_IN = registerfile[instword[24:20]];
                         endcase
                         nextstate = MEMORY;
+                    end
+                    ARM_IMM:begin
+                        next_program_counter = result;
+                        A = registerfile[instword[19:15]];
+                        B = {{20{instword[31]}}, instword[31:20]};
+                        case(instword[14:12])
+                            ///case block is just useful for setting the opcode
+                            3'h0: OPC = ADD;
+                            3'h2: OPC = SLT;
+                            3'h3: OPC = SLTU;
+                            3'h4: OPC = XOR;
+                            3'h6: OPC = OR;
+                            3'h7: OPC = SLL;
+                            3'h1: begin
+                                //F7 decoding into opcode
+                                if(instword[31:25] == 7'h00) OPC = SRR;
+                                else if(instword[31:25] == 7'h20) OPC = SRA;
+                            end
+                        endcase
+                        nextstate = WRITEBACK;
+                    end
+                    ARM_RR: begin
+                        next_program_counter = result;
+                        A = registerfile[instword[19:15]];
+                        B = registerfile[instword[24:20]];
+                        case(instword[14:12])
+                            3'h0:begin
+                                if(instword[31:25] == 7'h00) OPC = ADD;
+                                else if(instword[31:25] == 7'h20) OPC = SUB;
+                            end
+                            3'h1: OPC = SLL;
+                            3'h2: OPC = SLT;
+                            3'h3: OPC = SLTU;
+                            3'h4: OPC = XOR;
+                            3'h5: begin
+                                if(instword[31:25] == 7'h00) OPC = SRR;
+                                else if(instword[31:25] == 7'h20) OPC = SRA;
+                            end
+                            3'h6: OPC = OR;
+                            3'h7: OPC = AND;
+                        endcase
+                        nextstate = WRITEBACK;
                     end
                     FEN: nextstate = FETCH;
                         //treating fence as an nop here
@@ -307,17 +321,16 @@ module core(
                     opcode = OPC;
                     //updating the nextprogramcounter
                 end
-                //the calculation done in the execute cycle will most likely be for the program counter
-                next_program_counter = result;
+                //the calculation done in the execute cycle will most likely be for the program counter   
             end
             MEMORY:begin
                 //all memory acctions are done in the fsm,
                 //nothing here
                 //memory cant be read from or written to from any other block
+                next_program_counter = result;
                 if(instword[6:0] == LOAD) nextstate = WRITEBACK;
                 else nextstate = FETCH;
-                //handling only 2 states coz only 2 states can bring here
-                
+                //handling only 2 states coz only 2 states can bring here  
             end
             WRITEBACK:begin
                 //alu use will not happen in the writeback and memory state
@@ -330,13 +343,10 @@ module core(
                     end
                     AUIPC:begin
                         registerfile[instword[11:7]] = result;
-                        alu_a = program_counter;
-                        alu_b = 4;
-                        opcode = ADD;
-                        next_program_counter = result;
                     end 
                     JAL: registerfile[instword[11:7]] = result;
                     JALR: registerfile[instword[11:7]] = result;
+                    BRANCH: next_program_counter = result;
                     LOAD: begin
                         case(instword[14:12])
                         3'h0: registerfile[instword[11:7]] = {{24{data_word_OUT[7]}}, data_word_OUT[7:0]};
@@ -348,17 +358,9 @@ module core(
                     end
                     ARM_IMM:begin 
                         registerfile[instword[11:7]] = result;
-                        alu_a = program_counter;
-                        alu_b = 4;
-                        opcode = ADD;
-                        next_program_counter = result;
                     end
                     ARM_RR:begin
                         registerfile[instword[11:7]] = result;
-                        alu_a = program_counter;
-                        alu_b = 4;
-                        opcode = ADD;
-                        next_program_counter = result;
                     end
                 endcase
                 //registerfile always stays asynchronous
