@@ -1,0 +1,362 @@
+`begin_keywords "1800-2023"
+`line 1 "/usr/share/verilator/include/verilated_std.sv" 1
+ 
+
+`line 3 "/usr/share/verilator/include/verilated_std.sv" 0
+ 
+
+`line 5 "/usr/share/verilator/include/verilated_std.sv" 0
+ 
+
+`line 7 "/usr/share/verilator/include/verilated_std.sv" 0
+ 
+ 
+ 
+ 
+ 
+
+`line 13 "/usr/share/verilator/include/verilated_std.sv" 0
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+
+`line 26 "/usr/share/verilator/include/verilated_std.sv" 0
+ 
+ 
+
+`line 29 "/usr/share/verilator/include/verilated_std.sv" 0
+/*verilator lint_off DECLFILENAME*/
+/*verilator lint_off TIMESCALEMOD*/
+/*verilator lint_off UNUSEDSIGNAL*/
+package std;
+   
+  class mailbox #(
+      type T
+  );
+    protected int m_bound;
+    protected T m_queue[$];
+
+`line 40 "/usr/share/verilator/include/verilated_std.sv" 0
+    function new(int bound = 0);
+      m_bound = bound;
+    endfunction
+
+`line 44 "/usr/share/verilator/include/verilated_std.sv" 0
+    function int num();
+      return m_queue.size();
+    endfunction
+
+`line 48 "/usr/share/verilator/include/verilated_std.sv" 0
+    task put(T message);
+ 
+      while (m_bound != 0 && m_queue.size() >= m_bound)  
+        wait (m_queue.size() < m_bound);
+      m_queue.push_back(message);
+
+`line 54 "/usr/share/verilator/include/verilated_std.sv" 0
+    endtask
+
+`line 56 "/usr/share/verilator/include/verilated_std.sv" 0
+    function int try_put(T message);
+      if (m_bound == 0 || num() < m_bound) begin
+        m_queue.push_back(message);
+        return 1;
+      end
+      return 0;
+    endfunction
+
+`line 64 "/usr/share/verilator/include/verilated_std.sv" 0
+    task get(ref T message);
+ 
+      while (m_queue.size() == 0) begin
+        wait (m_queue.size() > 0);
+      end
+      message = m_queue.pop_front();
+
+`line 71 "/usr/share/verilator/include/verilated_std.sv" 0
+    endtask
+
+`line 73 "/usr/share/verilator/include/verilated_std.sv" 0
+    function int try_get(ref T message);
+      if (num() > 0) begin
+        message = m_queue.pop_front();
+        return 1;
+      end
+      return 0;
+    endfunction
+
+`line 81 "/usr/share/verilator/include/verilated_std.sv" 0
+    task peek(ref T message);
+ 
+      while (m_queue.size() == 0) begin
+        wait (m_queue.size() > 0);
+      end
+      message = m_queue[0];
+
+`line 88 "/usr/share/verilator/include/verilated_std.sv" 0
+    endtask
+
+`line 90 "/usr/share/verilator/include/verilated_std.sv" 0
+    function int try_peek(ref T message);
+      if (num() > 0) begin
+        message = m_queue[0];
+        return 1;
+      end
+      return 0;
+    endfunction
+  endclass
+
+`line 99 "/usr/share/verilator/include/verilated_std.sv" 0
+   
+  class semaphore;
+    protected int m_keyCount;
+
+`line 103 "/usr/share/verilator/include/verilated_std.sv" 0
+    function new(int keyCount = 0);
+      m_keyCount = keyCount;
+    endfunction
+
+`line 107 "/usr/share/verilator/include/verilated_std.sv" 0
+    function void put(int keyCount = 1);
+      m_keyCount += keyCount;
+    endfunction
+
+`line 111 "/usr/share/verilator/include/verilated_std.sv" 0
+    task get(int keyCount = 1);
+ 
+      while (m_keyCount < keyCount) begin
+        wait (m_keyCount >= keyCount);
+      end
+      m_keyCount -= keyCount;
+
+`line 118 "/usr/share/verilator/include/verilated_std.sv" 0
+    endtask
+
+`line 120 "/usr/share/verilator/include/verilated_std.sv" 0
+    function int try_get(int keyCount = 1);
+      if (m_keyCount >= keyCount) begin
+        m_keyCount -= keyCount;
+        return 1;
+      end
+      return 0;
+    endfunction
+  endclass
+
+`line 129 "/usr/share/verilator/include/verilated_std.sv" 0
+   
+  class process;
+    typedef enum {
+      FINISHED = 0,
+      RUNNING = 1,
+      WAITING = 2,
+      SUSPENDED = 3,
+      KILLED = 4
+    } state;
+
+`line 139 "/usr/share/verilator/include/verilated_std.sv" 0
+     
+    protected chandle m_process;
+
+`line 142 "/usr/share/verilator/include/verilated_std.sv" 0
+    static function process self();
+      process p = new;
+ 
+      $c(p.m_process, " = vlProcess;");
+
+`line 147 "/usr/share/verilator/include/verilated_std.sv" 0
+      return p;
+    endfunction
+
+`line 150 "/usr/share/verilator/include/verilated_std.sv" 0
+    protected function void set_status(state s);
+ 
+      $c(m_process, "->state(", s, ");");
+
+`line 154 "/usr/share/verilator/include/verilated_std.sv" 0
+    endfunction
+
+`line 156 "/usr/share/verilator/include/verilated_std.sv" 0
+    function state status();
+ 
+      return state'($cpure(m_process, "->state()"));
+
+`line 160 "/usr/share/verilator/include/verilated_std.sv" 0
+       
+
+`line 162 "/usr/share/verilator/include/verilated_std.sv" 0
+    endfunction
+
+`line 164 "/usr/share/verilator/include/verilated_std.sv" 0
+    function void kill();
+      set_status(KILLED);
+    endfunction
+
+`line 168 "/usr/share/verilator/include/verilated_std.sv" 0
+    function void suspend();
+      $error("std::process::suspend() not supported");
+    endfunction
+
+`line 172 "/usr/share/verilator/include/verilated_std.sv" 0
+    function void resume();
+      set_status(RUNNING);
+    endfunction
+
+`line 176 "/usr/share/verilator/include/verilated_std.sv" 0
+    task await();
+ 
+      wait (status() == FINISHED || status() == KILLED);
+
+`line 180 "/usr/share/verilator/include/verilated_std.sv" 0
+    endtask
+
+`line 182 "/usr/share/verilator/include/verilated_std.sv" 0
+    static task killQueue(ref process processQueue[$]);
+ 
+      while (processQueue.size() > 0) begin
+        processQueue.pop_back().kill();
+      end
+
+`line 188 "/usr/share/verilator/include/verilated_std.sv" 0
+    endtask
+
+`line 190 "/usr/share/verilator/include/verilated_std.sv" 0
+     
+     
+     
+     
+ 
+`systemc_header_post
+template<> template<>
+inline bool VlClassRef<`systemc_class_name>::operator==(const VlClassRef<`systemc_class_name>& rhs) const {
+    if (!m_objp && !rhs.m_objp) return true;
+    if (!m_objp || !rhs.m_objp) return false;
+    return m_objp->__PVT__m_process == rhs.m_objp->__PVT__m_process;
+};
+template<> template<>
+inline bool VlClassRef<`systemc_class_name>::operator!=(const VlClassRef<`systemc_class_name>& rhs) const {
+    if (!m_objp && !rhs.m_objp) return false;
+    if (!m_objp || !rhs.m_objp) return true;
+    return m_objp->__PVT__m_process != rhs.m_objp->__PVT__m_process;
+};
+template<> template<>
+inline bool VlClassRef<`systemc_class_name>::operator<(const VlClassRef<`systemc_class_name>& rhs) const {
+    if (!m_objp && !rhs.m_objp) return false;
+    if (!m_objp || !rhs.m_objp) return false;
+    return m_objp->__PVT__m_process < rhs.m_objp->__PVT__m_process;
+};
+`verilog
+
+`line 216 "/usr/share/verilator/include/verilated_std.sv" 0
+     
+
+`line 218 "/usr/share/verilator/include/verilated_std.sv" 0
+     
+     
+     
+    
+     
+     
+
+`line 225 "/usr/share/verilator/include/verilated_std.sv" 0
+     
+     
+     
+     
+    function string get_randstate();
+       
+      string s = string'($c("0"));
+
+`line 233 "/usr/share/verilator/include/verilated_std.sv" 0
+      $c(s, " = ", m_process, "->randstate();");
+      return s;
+    endfunction
+
+`line 237 "/usr/share/verilator/include/verilated_std.sv" 0
+    function void set_randstate(string s);
+      $c(m_process, "->randstate(", s, ");");
+    endfunction
+  endclass
+
+`line 242 "/usr/share/verilator/include/verilated_std.sv" 0
+   
+  function int randomize();
+    randomize = 0;
+  endfunction
+
+`line 247 "/usr/share/verilator/include/verilated_std.sv" 0
+   
+   
+   
+  typedef struct {
+    string name;
+    int weight;
+    int goal;
+    string comment;
+    int at_least;
+    int auto_bin_max;
+    int cross_num_print_missing;
+    bit cross_retain_auto_bins;
+    bit detect_overlap;
+    bit per_instance;
+    bit get_inst_coverage;
+  } vl_covergroup_options_t;
+
+`line 264 "/usr/share/verilator/include/verilated_std.sv" 0
+  typedef struct {
+    int weight;
+    int goal;
+    string comment;
+    int at_least;
+    int auto_bin_max;
+    bit detect_overlap;
+  } vl_coverpoint_options_t;
+
+`line 273 "/usr/share/verilator/include/verilated_std.sv" 0
+  typedef struct {
+    int weight;
+    int goal;
+    string comment;
+    int at_least;
+    int cross_num_print_missing;
+    bit cross_retain_auto_bins;
+  } vl_cross_options_t;
+
+`line 282 "/usr/share/verilator/include/verilated_std.sv" 0
+  typedef struct {
+    int weight;
+    int goal;
+    string comment;
+    bit strobe;
+    bit merge_instances;
+    bit distribute_first;
+    real real_interval;
+  } vl_covergroup_type_options_t;
+
+`line 292 "/usr/share/verilator/include/verilated_std.sv" 0
+  typedef struct {
+    int weight;
+    int goal;
+    string comment;
+    real real_interval;
+  } vl_coverpoint_type_options_t;
+
+`line 299 "/usr/share/verilator/include/verilated_std.sv" 0
+  typedef struct {
+    int weight;
+    int goal;
+    string comment;
+  } vl_cross_type_options_t;
+
+`line 305 "/usr/share/verilator/include/verilated_std.sv" 0
+endpackage
+
+`line 307 "/usr/share/verilator/include/verilated_std.sv" 0

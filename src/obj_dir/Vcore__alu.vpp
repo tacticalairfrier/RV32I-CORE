@@ -1,0 +1,70 @@
+`begin_keywords "1800-2023"
+`line 1 "alu.v" 1
+`default_nettype none 
+ 
+ 
+
+`line 5 "alu.v" 0
+module alu(
+    input wire [31:0] oper_a, oper_b,
+    input wire [3:0] opcode,
+    output reg [31:0] result,
+     
+    output reg [1:0] flags
+);
+/*verilator lint_off WIDTHEXPAND*/
+/*verilator lint_off EOFNEWLINE*/
+/*verilator lint_off CASEINCOMPLETE*/
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+localparam SLL = 4'h8,
+SRR = 4'h9,
+SRA = 4'ha,
+EQL = 4'hb,
+SLT = 4'hc,
+SLTU = 4'hd,
+ADD = 4'h7,
+SUB = 4'h6,
+AND = 4'h5, 
+OR = 4'h4,
+XOR = 4'h3;
+always@(*)begin
+     
+    flags = 2'b00;
+    case(opcode)
+     
+    XOR: result = oper_a ^ oper_b;
+    OR: result = oper_a | oper_b;
+    AND: result = oper_a & oper_b;
+    ADD:begin
+        {flags[0], result} = oper_a + oper_b;
+        flags[1] = result[31];
+    end
+    SUB:begin
+        result = oper_a - oper_b;
+        flags[1] = result[31];
+    end
+    SLL:begin
+        result = oper_a << oper_b[4:0];
+        flags[1] = result[31];
+    end
+    SRR: result = oper_a >> oper_b[4:0];
+    SRA: begin
+        result = oper_a >>> oper_b[4:0];
+        flags[1] = result[31];
+    end
+    EQL: result = (oper_a==oper_b);
+    SLT: result = ($signed(oper_a) < $signed(oper_b));
+    SLTU: result = (oper_a < oper_b);
+    endcase
+end
+endmodule
+
+`line 67 "alu.v" 0

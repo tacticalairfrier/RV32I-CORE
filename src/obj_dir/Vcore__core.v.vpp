@@ -1,0 +1,372 @@
+`begin_keywords "1800-2023"
+`line 1 "core.v" 1
+ 
+`default_nettype none
+ 
+ 
+ 
+module core(
+    /*verilator lint_off WIDTHEXPAND*/
+    /*verilator lint_off EOFNEWLINE*/
+    /*verilator lint_off CASEINCOMPLETE*/
+     
+    input wire clkin, reset,
+     
+    output wire [2:0] state_out,
+    output wire [1:0] flags
+    );
+     
+    localparam FETCH = 3'd0, DECODE = 3'd1, EXECUTE = 3'd2, MEMORY = 3'd3, WRITEBACK = 3'D4;
+     
+    localparam SLL = 4'h8, SRR = 4'h9, SRA = 4'ha, EQL = 4'hb, SLT = 4'hc, SLTU = 4'hd, ADD = 4'h7, SUB = 4'h6, AND = 4'h5, OR = 4'h4, XOR = 4'h3;
+     
+    localparam LUI = 7'h37, AUIPC = 7'h17, JAL = 7'h6f, JALR = 7'h67, BRANCH = 7'h63, LOAD = 7'h03, STORE = 7'h23, ARM_IMM = 7'h13, ARM_RR = 7'h33, FEN = 7'h0f, EC = 7'h73;
+     
+     
+     
+    reg [31:0] registerfile [0:31];
+    reg [31:0] program_counter, next_program_counter;
+    reg [31:0] A, B;
+     
+    reg [31:0] address_dat, data_word_IN;
+     
+    reg [31:0] instword;
+    reg [31:0] alu_a, alu_b;
+    reg [3:0] opcode, OPC;
+    reg [2:0] state, nextstate;
+    reg [1:0] data_rw;
+     
+    reg nop;
+     
+    wire [31:0] curr_inst, data_word_OUT;
+    wire [31:0] result;
+     
+    assign state_out = state;
+     
+     
+    memory MEM_0 (
+         
+        .address_inst(program_counter),
+        .address_dat(address_dat),
+        .datawordin(data_word_IN),
+        .clkin(clkin),
+        .dat_rw(data_rw),
+        .instword(curr_inst),
+        .datwordout(data_word_OUT)
+    );
+    alu ALU_0 (
+        .oper_a(alu_a),
+        .oper_b(alu_b),
+        .opcode(opcode),
+        .result(result),
+        .flags(flags)
+    );
+     
+    always@(posedge clkin, negedge reset)begin
+        if(!reset)begin
+            program_counter <= 32'h0;
+            state <= FETCH;
+            instword <= 32'h00000000;
+        end
+        else begin
+            state <= nextstate;
+            program_counter <= next_program_counter;
+            if(state==FETCH) instword <= curr_inst;
+             
+        end
+    end
+    always@(*)begin
+         
+        A = 32'h0;
+        B = 32'h0;
+        OPC = ADD;
+        alu_a = 32'h00000000;
+        alu_b = 32'h00000000;
+        opcode = ADD;
+        nop = 1'b0;
+        nextstate = state;
+        data_rw = 2'b00;
+        registerfile [0] = 32'h00000000;
+        next_program_counter = program_counter;
+        if(!reset)begin
+            nextstate = DECODE;
+             
+            next_program_counter = 4;
+            nop = 1'b0;
+        end
+        else begin
+            case(state)
+            FETCH:begin 
+                nextstate = DECODE;
+                end
+            DECODE:begin
+                 
+                nextstate = EXECUTE;
+                 
+                case(instword[6:0])
+                 
+                LUI: begin
+                     
+                     
+                    A = program_counter;
+                    B = 4;
+                    OPC = ADD;
+                    nextstate = WRITEBACK;
+                     
+                end
+                AUIPC:begin
+                    nextstate = WRITEBACK;
+                    A = {instword[31:12], 12'h000};
+                    B = program_counter;
+                    OPC = ADD;
+                end 
+                JAL: begin
+                    A = {{11{instword[31]}}, instword[31], instword[30], instword[30:21], instword[20], instword[19:12]};
+                    B = program_counter;
+                    OPC = ADD;
+                end
+                JALR: begin
+                    A = registerfile[instword[19:15]];
+                    B = {{20{instword[31]}}, instword[31:20]};
+                    OPC = ADD;
+                end
+                BRANCH: begin
+                     
+                    A = registerfile[instword[19:15]];
+                    B = registerfile[instword[24:20]];
+                    case(instword[14:12])
+                     
+                    3'h0: OPC = EQL;
+                     
+                    3'h1: OPC = EQL;
+                     
+                    3'h4: OPC = SLT;
+                     
+                    3'h5: OPC = SLT;
+                     
+                    3'h6: OPC = SLTU;
+                     
+                    3'h7: OPC = SLTU;
+                    endcase
+                end
+                 
+                LOAD: begin
+                     
+                    data_rw = 2'b10;
+                     
+                    A = registerfile[instword[19:15]];
+                    B = {{20{instword[31]}}, instword[31:20]};  
+                     
+                    OPC =  ADD;
+                     
+                     
+                end
+                STORE: begin
+                    data_rw = 2'b01;
+                     
+                    A = registerfile[instword[19:15]];
+                    B = {{20{instword[31]}} ,instword[31:25], instword[11:7]};
+                    OPC = ADD;
+                     
+                end
+                ARM_IMM: begin
+                     
+                     
+                     
+                    A = registerfile[instword[19:15]];
+                    B = {{20{instword[31]}}, instword[31:20]};
+                    case(instword[14:12])
+                         
+                        3'h0: OPC = ADD;
+                        3'h2: OPC = SLT;
+                        3'h3: OPC = SLTU;
+                        3'h4: OPC = XOR;
+                        3'h6: OPC = OR;
+                        3'h7: OPC = SLL;
+                        3'h1: begin
+                             
+                            if(instword[31:25] == 7'h00) OPC = SRR;
+                            else if(instword[31:25] == 7'h20) OPC = SRA;
+                        end
+                    endcase
+                    nextstate = WRITEBACK;
+                end
+                ARM_RR: begin
+                     
+                    A = registerfile[instword[19:15]];
+                    B = registerfile[instword[24:20]];
+                    case(instword[14:12])
+                    3'h0:begin
+                        if(instword[31:25] == 7'h00) OPC = ADD;
+                        else if(instword[31:25] == 7'h20) OPC = SUB;
+                    end
+                    3'h1: OPC = SLL;
+                    3'h2: OPC = SLT;
+                    3'h3: OPC = SLTU;
+                    3'h4: OPC = XOR;
+                    3'h5: begin
+                        if(instword[31:25] == 7'h00) OPC = SRR;
+                        else if(instword[31:25] == 7'h20) OPC = SRA;
+                    end
+                    3'h6: OPC = OR;
+                    3'h7: OPC = AND;
+                    endcase
+                    nextstate = WRITEBACK;
+                end
+                 
+                 
+                FEN: nop = 1'b1;
+                EC: nop = 1'b1;
+                endcase
+                 
+                if(instword == 32'b00000000) nop = 1'b1;
+                 
+                alu_a = A;
+                alu_b = B;
+                opcode = OPC;
+            end
+            EXECUTE:begin
+                 
+                nextstate = EXECUTE;
+                A = program_counter;
+                B = 4;
+                OPC = ADD;
+                 
+                 
+                 
+                 
+                case(instword[6:0])
+                    JAL:begin
+                         
+                        next_program_counter = result;
+                         
+                        nextstate = WRITEBACK;
+                    end
+                    JALR:begin
+                         
+                        next_program_counter = {result[31:1], 1'b0};
+                        nextstate = WRITEBACK;
+                    end
+                    BRANCH:begin
+                        if(instword[14:12] == 3'h0 || instword[14:12] == 3'h4 || instword[14:12] == 3'h6)begin
+                             
+                            if(result[1]) begin
+                                A = program_counter;
+                                 
+                                B = {{19{instword[31]}} ,instword[31], instword[7], instword[30:25], instword[11:8], 1'b0};
+                                OPC = ADD;
+                            end
+                        end
+                        else begin
+                             
+                            if(!result[1]) begin
+                                A = program_counter;
+                                 
+                                B = {{19{instword[31]}} ,instword[31], instword[7], instword[30:25], instword[11:8], 1'b0};
+                                OPC = ADD;
+                            end
+                        end
+                        nextstate = FETCH;
+                    end
+                    LOAD:begin
+                       nextstate = MEMORY;
+                       address_dat = result;
+                    end 
+                    STORE:begin
+                         
+                        address_dat = result;  
+                        case(instword[14:12])
+                        3'h0:data_word_IN = {24'h000000, registerfile[instword[24:20]][7:0]};  
+                        3'h1:data_word_IN = {16'h0000, registerfile[instword[24:20]][15:0]};
+                        3'h2:data_word_IN = registerfile[instword[24:20]];
+                        endcase
+                        nextstate = MEMORY;
+                    end
+                    FEN: nextstate = FETCH;
+                         
+                    EC: nextstate = FETCH;
+                         
+                         
+                     
+                endcase
+                 
+                 
+                 
+                 
+                 
+                 
+                if(nop)begin
+                     
+                     
+                     
+                    nextstate = FETCH;
+                end
+                 
+                alu_a = A;
+                alu_b = B;
+                opcode = OPC;
+                 
+                 
+                next_program_counter = result;
+            end
+            MEMORY:begin
+                 
+                 
+                 
+                if(instword[6:0] == LOAD) nextstate = WRITEBACK;
+                else nextstate = FETCH;
+                 
+                
+            end
+            WRITEBACK:begin
+                 
+                nextstate = FETCH;
+                case(instword[6:0])
+                    LUI: begin
+                         
+                        registerfile[instword[11:7]] = {instword[31:12], 12'h000};
+                        next_program_counter = result;
+                    end
+                    AUIPC:begin
+                        registerfile[instword[11:7]] = result;
+                        alu_a = program_counter;
+                        alu_b = 4;
+                        opcode = ADD;
+                        next_program_counter = result;
+                    end 
+                    JAL: registerfile[instword[11:7]] = result;
+                    JALR: registerfile[instword[11:7]] = result;
+                    LOAD: begin
+                        case(instword[14:12])
+                        3'h0: registerfile[instword[11:7]] = {{24{data_word_OUT[7]}}, data_word_OUT[7:0]};
+                        3'h1: registerfile[instword[11:7]] = {{16{data_word_OUT[15]}}, data_word_OUT[15:0]};
+                        3'h2: registerfile[instword[11:7]] = data_word_OUT;
+                        3'h4: registerfile[instword[11:7]] = {24'h000000, data_word_OUT[7:0]};
+                        3'h5: registerfile[instword[11:7]] = {16'h000000, data_word_OUT[7:0]};
+                        endcase
+                    end
+                    ARM_IMM:begin 
+                        registerfile[instword[11:7]] = result;
+                        alu_a = program_counter;
+                        alu_b = 4;
+                        opcode = ADD;
+                        next_program_counter = result;
+                    end
+                    ARM_RR:begin
+                        registerfile[instword[11:7]] = result;
+                        alu_a = program_counter;
+                        alu_b = 4;
+                        opcode = ADD;
+                        next_program_counter = result;
+                    end
+                endcase
+                 
+                 
+                 
+                 
+            end
+            endcase
+        end
+        end
+endmodule
+`line 370 "core.v" 0
