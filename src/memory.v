@@ -17,7 +17,7 @@ module memory(
 );
 //4 kilobyte instuction memory i.e ~1000 instructions can be stored approx
 //4 kb data memory to have apt sram
-reg [7:0] ins_mem [0:40]; //4095
+reg [7:0] ins_mem [0:80]; //4095
 reg [7:0] dat_mem [0:40];
 //putting the firmware inside the ins_mem
 //not possible in asic only for yosys/vivado

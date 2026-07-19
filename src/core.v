@@ -14,7 +14,7 @@ module core(
     output wire [1:0] flags
     );
     //5 Stages of the classic risc pipeline taken as states in an fsm
-    localparam FETCH = 3'd0, DECODE = 3'd1, EXECUTE = 3'd2, MEMORY = 3'd3, WRITEBACK = 3'D4;
+    localparam FETCH = 3'd0, DECODE = 3'd1, EXECUTE = 3'd2, MEMORY = 3'd3, WRITEBACK = 3'D4, RESET = 3'd5;
     ///localparam for opcodes of the alu
     localparam SLL = 4'h8, SRR = 4'h9, SRA = 4'ha, EQL = 4'hb, SLT = 4'hc, SLTU = 4'hd, ADD = 4'h7, SUB = 4'h6, AND = 4'h5, OR = 4'h4, XOR = 4'h3;
     //localparams for the riscv standard opcodes
@@ -34,7 +34,7 @@ module core(
     reg [2:0] state, nextstate;
     reg [1:0] data_rw;
     //a nop reg, when its high the instruction is supposed to be a nop
-    reg nop;
+    reg n_nop, nop;
     //wire nettypes
     wire [31:0] curr_inst, data_word_OUT;
     wire [31:0] result_alu;
@@ -63,14 +63,16 @@ module core(
     always@(posedge clkin)begin
         if(!reset)begin
             program_counter <= 32'h0;
-            state <= FETCH;
+            state <= RESET;
             instword <= 32'h00000000;
+            nop  <= `FALSE;
         end
         else begin
             state <= nextstate;
             program_counter <= next_program_counter;
             result <= result_alu;
-            if(state==FETCH) begin
+            nop<=n_nop;
+            if(nextstate==FETCH) begin
                 instword <= curr_inst;
                 //check the pc and pc latched logic
                 // pc_latched <= program_counter;
@@ -88,21 +90,33 @@ module core(
         opcode = ADD;
         nextstate = state;
         registerfile [0] = 32'h00000000;
+        n_nop = nop;
         next_program_counter = program_counter;
         if(!reset)begin
-            nextstate = DECODE;
+            nextstate = FETCH;
             //nextprogramcounter points at 4, will need to chck this logic
-            next_program_counter = 4;
-            nop = `FALSE;
+            next_program_counter = 0;
+            n_nop = `FALSE;
         end
         else begin
             case(state)
+            RESET: nextstate = FETCH;
             FETCH:begin 
                 nextstate = DECODE;
+                alu_a = instword;
+                alu_b = 32'h00000000;
+                opcode = EQL;
                 end
             DECODE:begin
                 //decoder puts the feilds into correct thing
                 nextstate = EXECUTE;
+                n_nop = `FALSE;
+                if(result[0]) begin
+                    n_nop = `TRUE;
+                    A = program_counter;
+                    B = 4;
+                    OPC = ADD;
+                end
                 //default nextstae is execute 
                 case(instword[6:0])
                 //lui
@@ -121,7 +135,8 @@ module core(
                     OPC = ADD;
                 end 
                 JAL: begin
-                    A = {{11{instword[31]}}, instword[31], instword[30], instword[30:21], instword[20], instword[19:12], `FALSE};
+                    // A = {{11{instword[31]}}, instword[31], instword[30], instword[30:21], instword[20], instword[19:12], `FALSE};
+                    A = {{11{instword[31]}}, instword[31], instword[19:12], instword[20], instword[30:21]};
                     B = program_counter;
                     OPC = ADD;
                 end
@@ -173,23 +188,22 @@ module core(
                     //all immediate arithemetic operations to be decoded HERE
                     //since my alu only takes the last 5 bits, no need to separately decode b 
                     //for shift operations
-                    A =  program_counter;
+                    A = program_counter;
                     B = 4;
                     OPC = ADD;
                 end
                 ARM_RR: begin
                     //a and b both are register to register types i.e r-type instructions
-                    A =  program_counter;
+                    A = program_counter;
                     B = 4;
                     OPC = ADD;
                 end
                 //fence and fence.tso instructions will be decoded but they do 
                 //absolutely nothing so treating as nop
-                FEN: nop = `TRUE;
-                EC: nop = `TRUE;
+                FEN: n_nop = `TRUE;
+                EC: n_nop = `TRUE;
                 endcase
                 //raises the nop flag when all are zero
-                if(instword == 32'b00000000) nop = `TRUE;
                 //first use of alu done right after the decode state
                 alu_a = A;
                 alu_b = B;
@@ -223,7 +237,7 @@ module core(
                     BRANCH:begin
                         if(instword[14:12] == 3'h0 || instword[14:12] == 3'h4 || instword[14:12] == 3'h6)begin
                             //for all true conditions -> beq, blt, bltu
-                            if(result[1]) begin
+                            if(result[0]) begin
                                 A = program_counter;
                                 //b is the offset to be added to the programcounter
                                 B = {{19{instword[31]}} ,instword[31], instword[7], instword[30:25], instword[11:8], `FALSE};
@@ -231,7 +245,7 @@ module core(
                         end
                         else begin
                             //for all false conditions -> bne, bge, bgeu
-                            if(!result[1]) begin
+                            if(!result[0]) begin
                                 A = program_counter;
                                 //b is the offset to be added to the programcounter
                                 B = {{19{instword[31]}} ,instword[31], instword[7], instword[30:25], instword[11:8], `FALSE};
@@ -309,9 +323,8 @@ module core(
                 //if the nop flag is high, then program counter is updated and the fsm is sent to fetch
                 //nop takes direct control of the alu in order to land on the new state
                 if(nop)begin
-                    alu_a = program_counter;
-                    alu_b = 4;
-                    opcode = ADD;
+                    n_nop = `FALSE;
+                    next_program_counter = result;
                     nextstate = FETCH;
                 end
                 else begin
@@ -329,7 +342,14 @@ module core(
                 //memory cant be read from or written to from any other block
                 next_program_counter = result;
                 if(instword[6:0] == LOAD) nextstate = WRITEBACK;
-                else nextstate = FETCH;
+                else begin
+                    nextstate = FETCH; //else state was store
+                    case(instword[14:12])
+                        3'h0: data_word_IN = {24'h000000, registerfile[instword[24:20]][7:0]};
+                        3'h1: data_word_IN = {16'h0000, registerfile[instword[24:20]][15:0]};
+                        3'h2: data_word_IN = registerfile[instword[24:20]];
+                    endcase
+                end
                 //handling only 2 states coz only 2 states can bring here  
             end
             WRITEBACK:begin
