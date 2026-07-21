@@ -110,31 +110,14 @@ module core(
             DECODE:begin
                 //result at decode is either 0 or a 1 when true n_nop goes high
                 //decoder puts the feilds into correct thing
+                A = program_counter;
+                B = 4;
+                OPC = ADD;
                 nextstate = EXECUTE;
                 n_nop = `FALSE;
-                if(result[0]) begin
-                    n_nop = `TRUE;
-                    A = program_counter;
-                    B = 4;
-                    OPC = ADD;
-                end
+                if(result[0]) n_nop = `TRUE;
                 //default nextstae is execute 
                 case(instword[6:0])
-                //lui
-                LUI: begin
-                    //LUI GOES DIRECTLY TO WRITEBACK
-                    //pc+4 calculation
-                    A = program_counter;
-                    B = 4;
-                    OPC = ADD;
-                    nextstate = EXECUTE;
-                    //lui can directly go to the memory as the
-                end
-                AUIPC:begin
-                    A = program_counter;
-                    B = 4;
-                    OPC = ADD;
-                end 
                 JAL: begin
                     // A = {{11{instword[31]}}, instword[31], instword[30], instword[30:21], instword[20], instword[19:12], `FALSE};
                     A = {{11{instword[31]}}, instword[31], instword[19:12], instword[20], instword[30:21], `FALSE};
@@ -185,20 +168,6 @@ module core(
                     OPC = ADD;
                     nextstate = EXECUTE;
                 end
-                ARM_IMM: begin
-                    //all immediate arithemetic operations to be decoded HERE
-                    //since my alu only takes the last 5 bits, no need to separately decode b 
-                    //for shift operations
-                    A = program_counter;
-                    B = 4;
-                    OPC = ADD;
-                end
-                ARM_RR: begin
-                    //a and b both are register to register types i.e r-type instructions
-                    A = program_counter;
-                    B = 4;
-                    OPC = ADD;
-                end
                 //fence and fence.tso instructions will be decoded but they do 
                 //absolutely nothing so treating as nop
                 FEN: n_nop = `TRUE;
@@ -227,15 +196,8 @@ module core(
                         A = {instword[31:12], 12'h000};
                         B = program_counter;
                     end
-                    JAL:begin
-                        //nextprogramcounter stores the result 
-                        next_program_counter = result;
-                        //writeback for writing pc+4 into the thing
-                    end
-                    JALR:begin
-                        //removed the last 0 and put the values in the a,b, opc register
-                        next_program_counter = {result[31:1], `FALSE};
-                    end
+                    JAL:next_program_counter = result;
+                    JALR: next_program_counter = {result[31:1], `FALSE};
                     BRANCH:begin
                         if(instword[14:12] == 3'h0 || instword[14:12] == 3'h4 || instword[14:12] == 3'h6)begin
                             //for all true conditions -> beq, blt, bltu
