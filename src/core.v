@@ -44,7 +44,7 @@ module core(
     //initialising the modules 
     memory MEM_0 (
         //directly linking the program counter to the memory
-        .address_inst(program_counter),
+        .address_inst(next_program_counter),
         .address_dat(address_dat),
         .datawordin(data_word_IN),
         .clkin(clkin),
@@ -94,7 +94,6 @@ module core(
         next_program_counter = program_counter;
         if(!reset)begin
             nextstate = FETCH;
-            //nextprogramcounter points at 4, will need to chck this logic
             next_program_counter = 0;
             n_nop = `FALSE;
         end
@@ -102,12 +101,14 @@ module core(
             case(state)
             RESET: nextstate = FETCH;
             FETCH:begin 
+                //fetch's alu use is to calculate whether the instruction is a nop or not
                 nextstate = DECODE;
                 alu_a = instword;
                 alu_b = 32'h00000000;
                 opcode = EQL;
                 end
             DECODE:begin
+                //result at decode is either 0 or a 1 when true n_nop goes high
                 //decoder puts the feilds into correct thing
                 nextstate = EXECUTE;
                 n_nop = `FALSE;
@@ -126,7 +127,7 @@ module core(
                     A = program_counter;
                     B = 4;
                     OPC = ADD;
-                    nextstate = WRITEBACK;
+                    nextstate = EXECUTE;
                     //lui can directly go to the memory as the
                 end
                 AUIPC:begin
@@ -136,7 +137,7 @@ module core(
                 end 
                 JAL: begin
                     // A = {{11{instword[31]}}, instword[31], instword[30], instword[30:21], instword[20], instword[19:12], `FALSE};
-                    A = {{11{instword[31]}}, instword[31], instword[19:12], instword[20], instword[30:21]};
+                    A = {{11{instword[31]}}, instword[31], instword[19:12], instword[20], instword[30:21], `FALSE};
                     B = program_counter;
                     OPC = ADD;
                 end
@@ -220,6 +221,7 @@ module core(
                 //the important constraint of the multicycle approach is to use the alu exactly once per state
                 //as long as a b and opcode are kept the same, the result will be same
                 case(instword[6:0])
+                    LUI: next_program_counter = result;
                     AUIPC: begin
                         next_program_counter = result;
                         A = {instword[31:12], 12'h000};
@@ -251,6 +253,7 @@ module core(
                                 B = {{19{instword[31]}} ,instword[31], instword[7], instword[30:25], instword[11:8], `FALSE};
                             end
                         end
+                        nextstate = MEMORY;
                     end
                     LOAD:begin
                         next_program_counter = result;
@@ -323,9 +326,9 @@ module core(
                 //if the nop flag is high, then program counter is updated and the fsm is sent to fetch
                 //nop takes direct control of the alu in order to land on the new state
                 if(nop)begin
-                    n_nop = `FALSE;
+                    n_nop = `TRUE;
                     next_program_counter = result;
-                    nextstate = FETCH;
+                    nextstate = WRITEBACK;
                 end
                 else begin
                     //the alu is passed the newly computed values of the registers A, B and OPC
@@ -341,7 +344,7 @@ module core(
                 //nothing here
                 //memory cant be read from or written to from any other block
                 next_program_counter = result;
-                if(instword[6:0] == LOAD) nextstate = WRITEBACK;
+                if(instword[6:0] == LOAD||instword[6:0] == BRANCH) nextstate = WRITEBACK;
                 else begin
                     nextstate = FETCH; //else state was store
                     case(instword[14:12])
@@ -357,16 +360,14 @@ module core(
                 nextstate = FETCH;
                 case(instword[6:0])
                     LUI: begin
-                        //lui path fetch -> decode ->writeback
+                        //lui path fetch -> decode ->execute->writeback
                         registerfile[instword[11:7]] = {instword[31:12], 12'h000};
-                        next_program_counter = result;
                     end
                     AUIPC:begin
                         registerfile[instword[11:7]] = result;
                     end 
                     JAL: registerfile[instword[11:7]] = result;
                     JALR: registerfile[instword[11:7]] = result;
-                    BRANCH: next_program_counter = result;
                     LOAD: begin
                         case(instword[14:12])
                         3'h0: registerfile[instword[11:7]] = {{24{data_word_OUT[7]}}, data_word_OUT[7:0]};

@@ -30,7 +30,7 @@ initial begin
     for(i=0;i<40;i=i+1)begin
         $dumpvars(0, RV32I_00.MEM_0.dat_mem[i]);
     end
-    #800;
+    #2400;
     $finish;
 end
 endmodule
