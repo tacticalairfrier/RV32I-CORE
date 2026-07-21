@@ -312,9 +312,9 @@ module core(
                         endcase
                         nextstate = WRITEBACK;
                     end
-                    FEN: nextstate = FETCH;
+                    FEN: nextstate = WRITEBACK;
                         //treating fence as an nop here
-                    EC: nextstate = FETCH;
+                    EC: nextstate = WRITEBACK;
                         //calling ecall as an nop here 
                         //will need to add some functionality
                     //second use of the alu
@@ -344,15 +344,16 @@ module core(
                 //nothing here
                 //memory cant be read from or written to from any other block
                 next_program_counter = result;
-                if(instword[6:0] == LOAD||instword[6:0] == BRANCH) nextstate = WRITEBACK;
-                else begin
-                    nextstate = FETCH; //else state was store
-                    case(instword[14:12])
-                        3'h0: data_word_IN = {24'h000000, registerfile[instword[24:20]][7:0]};
-                        3'h1: data_word_IN = {16'h0000, registerfile[instword[24:20]][15:0]};
-                        3'h2: data_word_IN = registerfile[instword[24:20]];
-                    endcase
-                end
+                nextstate = WRITEBACK;
+                // if(instword[6:0] == LOAD||instword[6:0] == BRANCH) nextstate = WRITEBACK;
+                // else begin
+                //     nextstate = FETCH; //else state was store
+                case(instword[14:12])
+                    3'h0: data_word_IN = {24'h000000, registerfile[instword[24:20]][7:0]};
+                    3'h1: data_word_IN = {16'h0000, registerfile[instword[24:20]][15:0]};
+                    3'h2: data_word_IN = registerfile[instword[24:20]];
+                endcase
+                // end
                 //handling only 2 states coz only 2 states can bring here  
             end
             WRITEBACK:begin
@@ -384,6 +385,8 @@ module core(
                         registerfile[instword[11:7]] = result;
                     end
                 endcase
+                //registerfile cleanup
+                registerfile[0] = 32'h0000_0000;
                 //registerfile always stays asynchronous
                 //IN this stage only can the registerfile be written
                 //the registerfile can be read in any other states
