@@ -54,7 +54,7 @@ always@(*)begin
     end
     SRR: result = oper_a >> oper_b[4:0];
     SRA: begin
-        result = oper_a >>> oper_b[4:0];
+        result = $signed(oper_a) >>> oper_b[4:0];
         flags[1] = result[31];
     end
     EQL: result = (oper_a==oper_b);

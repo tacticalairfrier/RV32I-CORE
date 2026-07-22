@@ -5,7 +5,6 @@
 //core module here
 module core(
     /* verilator lint_off WIDTHEXPAND */
-    /* verilator lint_off EOFNEWLINE */
     /* verilator lint_off CASEINCOMPLETE */
     //debug inst
     input wire clkin, reset,
@@ -218,7 +217,7 @@ module core(
                         nextstate = MEMORY;
                     end
                     LOAD:begin
-                        next_program_counter = result;
+                        // next_program_counter = result;
                         nextstate = MEMORY;
                         address_dat = result;
                     end 
@@ -239,16 +238,18 @@ module core(
                         case(instword[14:12])
                             ///case block is just useful for setting the opcode
                             3'h0: OPC = ADD;
+                            3'h1: OPC = SLL;
                             3'h2: OPC = SLT;
                             3'h3: OPC = SLTU;
                             3'h4: OPC = XOR;
-                            3'h6: OPC = OR;
-                            3'h7: OPC = SLL;
-                            3'h1: begin
+                            3'h5: begin
                                 //F7 decoding into opcode
                                 if(instword[31:25] == 7'h00) OPC = SRR;
                                 else if(instword[31:25] == 7'h20) OPC = SRA;
                             end
+                            3'h6: OPC = OR;
+                            3'h7: OPC = AND;
+                            
                         endcase
                         nextstate = WRITEBACK;
                     end
@@ -322,13 +323,9 @@ module core(
                 //alu use will not happen in the writeback and memory state
                 nextstate = FETCH;
                 case(instword[6:0])
-                    LUI: begin
-                        //lui path fetch -> decode ->execute->writeback
-                        registerfile[instword[11:7]] = {instword[31:12], 12'h000};
-                    end
-                    AUIPC:begin
-                        registerfile[instword[11:7]] = result;
-                    end 
+                    LUI: registerfile[instword[11:7]] = {instword[31:12], 12'h000};
+                    //lui path fetch -> decode ->execute->writeback
+                    AUIPC: registerfile[instword[11:7]] = result;
                     JAL: registerfile[instword[11:7]] = result;
                     JALR: registerfile[instword[11:7]] = result;
                     LOAD: begin
@@ -340,12 +337,8 @@ module core(
                         3'h5: registerfile[instword[11:7]] = {16'h000000, data_word_OUT[7:0]};
                         endcase
                     end
-                    ARM_IMM:begin 
-                        registerfile[instword[11:7]] = result;
-                    end
-                    ARM_RR:begin
-                        registerfile[instword[11:7]] = result;
-                    end
+                    ARM_IMM: registerfile[instword[11:7]] = result;
+                    ARM_RR: registerfile[instword[11:7]] = result;
                 endcase
                 //registerfile cleanup
                 registerfile[0] = 32'h0000_0000;
