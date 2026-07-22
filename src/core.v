@@ -195,7 +195,7 @@ module core(
                         A = {instword[31:12], 12'h000};
                         B = program_counter;
                     end
-                    JAL:next_program_counter = result;
+                    JAL: next_program_counter = result;
                     JALR: next_program_counter = {result[31:1], `FALSE};
                     BRANCH:begin
                         if(instword[14:12] == 3'h0 || instword[14:12] == 3'h4 || instword[14:12] == 3'h6)begin
