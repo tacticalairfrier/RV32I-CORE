@@ -25,13 +25,13 @@ module core(
     reg [31:0] program_counter, next_program_counter;
     reg [31:0] A, B, result;
     //memory interface
-    reg [31:0] address_dat, data_word_IN;
+    reg [31:0] address_dat, n_address_dat, data_word_IN, n_data_word_IN;
     //alu
     reg [31:0] instword;
     reg [31:0] alu_a, alu_b;
     reg [3:0] opcode, OPC;
     reg [2:0] state, nextstate;
-    reg [1:0] data_rw;
+    reg [1:0] data_rw, n_data_rw;
     //a nop reg, when its high the instruction is supposed to be a nop
     reg n_nop, nop;
     //wire nettypes
@@ -44,8 +44,8 @@ module core(
     memory MEM_0 (
         //directly linking the program counter to the memory
         .address_inst(next_program_counter),
-        .address_dat(address_dat),
-        .datawordin(data_word_IN),
+        .address_dat(n_address_dat),
+        .datawordin(n_data_word_IN),
         .clkin(clkin),
         .dat_rw(data_rw),
         .instword(curr_inst),
@@ -70,7 +70,10 @@ module core(
             state <= nextstate;
             program_counter <= next_program_counter;
             result <= result_alu;
-            nop<=n_nop;
+            nop <= n_nop;
+            data_rw <= n_data_rw;
+            address_dat <= n_address_dat;
+            data_word_IN <= n_data_word_IN;
             if(nextstate==FETCH) begin
                 instword <= curr_inst;
                 //check the pc and pc latched logic
@@ -90,11 +93,16 @@ module core(
         nextstate = state;
         registerfile [0] = 32'h00000000;
         n_nop = nop;
+        n_data_rw = data_rw;
         next_program_counter = program_counter;
+        //
+        n_address_dat = address_dat;
+        n_data_word_IN = data_word_IN;
         if(!reset)begin
             nextstate = FETCH;
             next_program_counter = 0;
             n_nop = `FALSE;
+            n_data_rw = 2'b00;
         end
         else begin
             case(state)
@@ -150,7 +158,7 @@ module core(
                 //only load and store are allowed to take the fsm into memory
                 LOAD: begin
                     //data rw is true because ur loading data inside
-                    data_rw = 2'b10;
+                    n_data_rw = 2'b10;
                     //A is the rs1 and b is the immediate instruction field using i-type field
                     A = registerfile[instword[19:15]];
                     B = {{20{instword[31]}}, instword[31:20]}; //sign-extended
@@ -160,7 +168,7 @@ module core(
                     //THE logic for fetching from memory comes in the decode phase
                 end
                 STORE: begin
-                    data_rw = 2'b01; ///latch
+                    n_data_rw = 2'b01; ///latch
                     //decode for the s-type instruction
                     A = registerfile[instword[19:15]];
                     B = {{20{instword[31]}} ,instword[31:25], instword[11:7]};
@@ -170,7 +178,10 @@ module core(
                 //fence and fence.tso instructions will be decoded but they do 
                 //absolutely nothing so treating as nop
                 FEN: n_nop = `TRUE;
-                EC: n_nop = `TRUE;
+                //ecall reserved address = 0x1000
+                EC: begin
+                    n_data_rw = 2'b01; //memory in write
+                end
                 endcase
                 //raises the nop flag when all are zero
                 //first use of alu done right after the decode state
@@ -219,15 +230,15 @@ module core(
                     LOAD:begin
                         // next_program_counter = result;
                         nextstate = MEMORY;
-                        address_dat = result;
+                        n_address_dat = result;
                     end 
                     STORE:begin
                         //case statement
-                        address_dat = result; /// latch needed, 
+                        n_address_dat = result; /// latch needed, 
                         case(instword[14:12])
-                        3'h0:data_word_IN = {24'h000000, registerfile[instword[24:20]][7:0]}; //latch needed
-                        3'h1:data_word_IN = {16'h0000, registerfile[instword[24:20]][15:0]};
-                        3'h2:data_word_IN = registerfile[instword[24:20]];
+                        3'h0:n_data_word_IN = {24'h000000, registerfile[instword[24:20]][7:0]}; //latch needed
+                        3'h1:n_data_word_IN = {16'h0000, registerfile[instword[24:20]][15:0]};
+                        3'h2:n_data_word_IN = registerfile[instword[24:20]];
                         endcase
                         nextstate = MEMORY;
                     end
@@ -249,7 +260,6 @@ module core(
                             end
                             3'h6: OPC = OR;
                             3'h7: OPC = AND;
-                            
                         endcase
                         nextstate = WRITEBACK;
                     end
@@ -277,7 +287,13 @@ module core(
                     end
                     FEN: nextstate = WRITEBACK;
                         //treating fence as an nop here
-                    EC: nextstate = WRITEBACK;
+                    EC:begin
+                        next_program_counter = result;
+                        nextstate = MEMORY;
+                        if(instword[31:25] == 7'h01) n_data_word_IN = 2; //ebreak
+                        else n_data_word_IN = 1; // ecall 
+                        n_address_dat = 12'hffc;
+                    end 
                         //calling ecall as an nop here 
                         //will need to add some functionality
                     //second use of the alu
@@ -285,7 +301,6 @@ module core(
                 //Initial part of decode is done 
                 //some operations need the alu more than once i.e first for shifting to the left and then calculating the rd 
                 //program counter next updated here
-                // nextstate = MEMORY;
                 //if the nop flag is high, then program counter is updated and the fsm is sent to fetch
                 //nop takes direct control of the alu in order to land on the new state
                 if(nop)begin
@@ -308,15 +323,6 @@ module core(
                 //memory cant be read from or written to from any other block
                 next_program_counter = result;
                 nextstate = WRITEBACK;
-                // if(instword[6:0] == LOAD||instword[6:0] == BRANCH) nextstate = WRITEBACK;
-                // else begin
-                //     nextstate = FETCH; //else state was store
-                case(instword[14:12])
-                    3'h0: data_word_IN = {24'h000000, registerfile[instword[24:20]][7:0]};
-                    3'h1: data_word_IN = {16'h0000, registerfile[instword[24:20]][15:0]};
-                    3'h2: data_word_IN = registerfile[instword[24:20]];
-                endcase
-                // end
                 //handling only 2 states coz only 2 states can bring here  
             end
             WRITEBACK:begin

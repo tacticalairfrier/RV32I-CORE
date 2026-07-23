@@ -387,6 +387,5 @@ int main() {
         }
         printf("\n");
     }
-
     //or instruction cache
 }
