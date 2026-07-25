@@ -78,25 +78,25 @@ module core(
             //this makes it so that the registerfile is inferred as sram rather than transperant latches
             if(nextstate==WRITEBACK)begin
                 case(instword[6:0])
-                    LUI: registerfile[instword[11:7]] = {instword[31:12], 12'h000};
+                    LUI: registerfile[instword[11:7]] <= {instword[31:12], 12'h000};
                     //lui path fetch -> decode ->execute->writeback
-                    AUIPC: registerfile[instword[11:7]] = result_alu;
-                    JAL: registerfile[instword[11:7]] = result_alu;
-                    JALR: registerfile[instword[11:7]] = result_alu;
+                    AUIPC: registerfile[instword[11:7]] <= result_alu;
+                    JAL: registerfile[instword[11:7]] <= result_alu;
+                    JALR: registerfile[instword[11:7]] <= result_alu;
                     LOAD: begin
                         case(instword[14:12])
-                        3'h0: registerfile[instword[11:7]] = {{24{data_word_OUT[7]}}, data_word_OUT[7:0]};
-                        3'h1: registerfile[instword[11:7]] = {{16{data_word_OUT[15]}}, data_word_OUT[15:0]};
-                        3'h2: registerfile[instword[11:7]] = data_word_OUT;
-                        3'h4: registerfile[instword[11:7]] = {24'h000000, data_word_OUT[7:0]};
-                        3'h5: registerfile[instword[11:7]] = {16'h000000, data_word_OUT[7:0]};
+                        3'h0: registerfile[instword[11:7]] <= {{24{data_word_OUT[7]}}, data_word_OUT[7:0]};
+                        3'h1: registerfile[instword[11:7]] <= {{16{data_word_OUT[15]}}, data_word_OUT[15:0]};
+                        3'h2: registerfile[instword[11:7]] <= data_word_OUT;
+                        3'h4: registerfile[instword[11:7]] <= {24'h000000, data_word_OUT[7:0]};
+                        3'h5: registerfile[instword[11:7]] <= {16'h000000, data_word_OUT[7:0]};
                         endcase
                     end
-                    ARM_IMM: registerfile[instword[11:7]] = result_alu;
-                    ARM_RR: registerfile[instword[11:7]] = result_alu;
+                    ARM_IMM: registerfile[instword[11:7]] <= result_alu;
+                    ARM_RR: registerfile[instword[11:7]] <= result_alu;
                 endcase
                 //registerfile cleanup
-                registerfile[0] = 32'h0000_0000;
+                registerfile[0] <= 32'h0000_0000;
             end
             //check the pc and pc latched logic
             // pc_latched <= program_counter;
