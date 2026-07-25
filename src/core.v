@@ -75,6 +75,7 @@ module core(
             address_dat <= n_address_dat;
             data_word_IN <= n_data_word_IN;
             if(nextstate==FETCH) instword <= curr_inst;
+            //this makes it so that the registerfile is inferred as sram rather than transperant latches
             if(nextstate==WRITEBACK)begin
                 case(instword[6:0])
                     LUI: registerfile[instword[11:7]] = {instword[31:12], 12'h000};
@@ -314,8 +315,8 @@ module core(
                         else n_data_word_IN = 1; // ecall 
                         n_address_dat = 12'hffc;
                     end 
-                        //calling ecall as an nop here 
-                        //will need to add some functionality
+                    //calling ecall as an nop here 
+                    //will need to add some functionality
                     //second use of the alu
                 endcase
                 //Initial part of decode is done 
@@ -347,7 +348,7 @@ module core(
             end
             WRITEBACK: nextstate = FETCH;
                 //alu use will not happen in the writeback and memory state
-                //registerfile always stays asynchronous
+                //registerfile always stays synced to the clock posedge and thus stays syncronous
                 //IN this stage only can the registerfile be written
                 //the registerfile can be read in any other states
                 //this is just for WRITING on the registerfile
