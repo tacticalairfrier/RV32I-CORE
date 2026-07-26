@@ -1,0 +1,9 @@
+The firmware.hex in this implementation is a very basic firmware which does
+1. a counter which counts up to 10 using branch and jumps
+2. load upper intermediate loads first 20 bits of a an address
+3. an addi instruction on the same instruction
+4. another lui instruction which loads another value along with a separate value
+4. testing of the add, xor, or, sub and add instructions
+5. nop instruction which separates regimes
+6. tests for load and store instructions along with left shift and right shift operators
+7. jalr instruction to go back to the start and do a loop
