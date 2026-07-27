@@ -2,6 +2,7 @@
 #include<stdlib.h>
 #include<stdbool.h>
 #include<stdint.h>
+#include "firmware.h"
 //this is the golden reference model or instruction set simulator for my risc-v core
 //this core is a part of a larger crypto core which i am going to create
 //function prototypes here
@@ -13,32 +14,16 @@ int main() {
     uint32_t registerfile[32] = { 0 };
     uint32_t program_counter = 0x000000000; //program counter initialised to zero in the starting of the game
     uint32_t inst_curr;
-    //using malloc fxn to denote memory
-    // uint8_t* mem_arr = (uint8_t*)malloc(80*sizeof(uint8_t));
-    // uint8_t* inst_arr = (uint8_t*)malloc(80*sizeof(uint8_t));
-    //using static arrays for testing
-    uint8_t inst_arr[32] =
-    { 0xb7, 0x50, 0x34 ,0x12, //lui
-    0x93, 0x80, 0x80, 0x67, //addi
-    0x37, 0x01, 0xff, 0x00, // lui
-    0x13, 0x01, 0xe1, 0xee, //addi
-    0xb3, 0x71, 0x11, 0x00, //and
-    0x13, 0xc2, 0x91, 0x67, //xori
-    0x23, 0x20, 0x30, 0x00, //sw for the first mem addr
-    0x23, 0x22, 0x40, 0x00
-    }; // this can store like 4 instructions enough for verification //store  
-    // 0x23, 0x20, 0x30, 0x00 ,
-    // 0x23, 0x02, 0x40, 0x00,
     uint8_t mem_arr[80] = { 0 };
     int32_t rs1, rs2;
     uint32_t index;
     //a simple for loop which does the part of reading every instruction over and over
     printf("instruction mem\n");
-    for (int i = 0; i < 32; i++) {
+    for (int i = 0; i < firmware_bytes_len; i++) {
         printf(" %02x ", inst_arr[i]);
         printf("\n");
     }
-    while (program_counter <= 80) {
+    while (program_counter <= firmware_bytes_len) {
         // //copying over the instruction into a temporary current instruction array because well i need to bitshift to hell
         inst_curr = (inst_arr[program_counter + 3] << 24 | inst_arr[program_counter + 2] << 16 | inst_arr[program_counter + 1] << 8 | inst_arr[program_counter]);
         //filtering the opcodes first   
@@ -192,23 +177,23 @@ int main() {
             switch ((inst_curr & 0x7000) >> 12) {
             case 0x00: {
                 //sb -> stores byte
-                mem_arr[index + 3] = registerfile[(inst_curr & 0x1f00000) >> 20] & 0xff;
+                mem_arr[index] = registerfile[(inst_curr & 0x1f00000) >> 20] & 0xff;
                 program_counter += 4;
                 break;
             }
             case 0x01: {
                 //sh -> stores halfword
-                mem_arr[index + 2] = (registerfile[(inst_curr & 0x1f00000) >> 20] & 0xff00) >> 8;
-                mem_arr[index + 3] = registerfile[(inst_curr & 0x1f00000) >> 20] & 0xff;
+                mem_arr[index + 1] = (registerfile[(inst_curr & 0x1f00000) >> 20] & 0xff00) >> 8;
+                mem_arr[index] = registerfile[(inst_curr & 0x1f00000) >> 20] & 0xff;
                 program_counter += 4;
                 break;
             }
             case 0x02: {
                 //sw -> stores word
-                mem_arr[index] = (registerfile[(inst_curr & 0x1f00000) >> 20] & 0xff000000) >> 24;
-                mem_arr[index + 1] = (registerfile[(inst_curr & 0x1f00000) >> 20] & 0xff0000) >> 16;
-                mem_arr[index + 2] = (registerfile[(inst_curr & 0x1f00000) >> 20] & 0xff00) >> 8;
-                mem_arr[index + 3] = registerfile[(inst_curr & 0x1f00000) >> 20] & 0xff;
+                mem_arr[index + 3] = (registerfile[(inst_curr & 0x1f00000) >> 20] & 0xff000000) >> 24;
+                mem_arr[index + 2] = (registerfile[(inst_curr & 0x1f00000) >> 20] & 0xff0000) >> 16;
+                mem_arr[index + 1] = (registerfile[(inst_curr & 0x1f00000) >> 20] & 0xff00) >> 8;
+                mem_arr[index] = registerfile[(inst_curr & 0x1f00000) >> 20] & 0xff;
                 program_counter += 4;
                 break;
             }
@@ -373,6 +358,7 @@ int main() {
             break;
         }
         }
+        registerfile[0] = 0;
         printf("pc = %08x\n", program_counter);
         printf("registers\n");
         for (int j = 0; j < 32;j++) {
