@@ -192,23 +192,23 @@ int main() {
             switch ((inst_curr & 0x7000) >> 12) {
             case 0x00: {
                 //sb -> stores byte
-                mem_arr[index] = registerfile[(inst_curr & 0x1f00000) >> 20] & 0xff;
+                mem_arr[index + 3] = registerfile[(inst_curr & 0x1f00000) >> 20] & 0xff;
                 program_counter += 4;
                 break;
             }
             case 0x01: {
                 //sh -> stores halfword
-                mem_arr[index + 1] = (registerfile[(inst_curr & 0x1f00000) >> 20] & 0xff00) >> 8;
-                mem_arr[index] = registerfile[(inst_curr & 0x1f00000) >> 20] & 0xff;
+                mem_arr[index + 2] = (registerfile[(inst_curr & 0x1f00000) >> 20] & 0xff00) >> 8;
+                mem_arr[index + 3] = registerfile[(inst_curr & 0x1f00000) >> 20] & 0xff;
                 program_counter += 4;
                 break;
             }
             case 0x02: {
                 //sw -> stores word
-                mem_arr[index + 3] = (registerfile[(inst_curr & 0x1f00000) >> 20] & 0xff000000) >> 24;
-                mem_arr[index + 2] = (registerfile[(inst_curr & 0x1f00000) >> 20] & 0xff0000) >> 16;
-                mem_arr[index + 1] = (registerfile[(inst_curr & 0x1f00000) >> 20] & 0xff00) >> 8;
-                mem_arr[index] = registerfile[(inst_curr & 0x1f00000) >> 20] & 0xff;
+                mem_arr[index] = (registerfile[(inst_curr & 0x1f00000) >> 20] & 0xff000000) >> 24;
+                mem_arr[index + 1] = (registerfile[(inst_curr & 0x1f00000) >> 20] & 0xff0000) >> 16;
+                mem_arr[index + 2] = (registerfile[(inst_curr & 0x1f00000) >> 20] & 0xff00) >> 8;
+                mem_arr[index + 3] = registerfile[(inst_curr & 0x1f00000) >> 20] & 0xff;
                 program_counter += 4;
                 break;
             }
