@@ -85,4 +85,28 @@ _main:
     sh x1, 28(x0)
     sb x1, 32(x0)
     # tests for immediate instructions
-    
+    lw x5, 0(x0)
+    lw x6, 4(x0)
+    lw x7, 8(x0)
+    lw x8, 12(x0)
+    xori x11, x5, 0x6fb
+    ori x12, x6, 0x542
+    andi x13, x7, 0x431
+    sw x11, 36(x0)
+    sw x12, 40(x0)
+    sw x13, 44(x0)
+    #testing 1 branch with the 0 output and 1 with a 0
+    sra x14, x11, x12
+    srl x15, x11, x12
+    sll x16, x11, x12
+    xor x14, x14, x15
+    xor x14, x14, x15
+    xor x14, x14, x16
+    sw x14, 48(x0)
+    #testing branch statements
+    li x5, 10
+    li x6, 0
+    beq x5, x6, 0x1ac
+    addi x6, x6, 1
+    jal x0, 0x19c
+    sw x6, 52(x0)
