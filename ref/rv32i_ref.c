@@ -27,7 +27,9 @@ int main() {
     }
     while (program_counter <= firmware_bytes_len) {
         // //copying over the instruction into a temporary current instruction array because well i need to bitshift to hell
+        printf("pc = %08x\n", program_counter);
         inst_curr = (inst_arr[program_counter + 3] << 24 | inst_arr[program_counter + 2] << 16 | inst_arr[program_counter + 1] << 8 | inst_arr[program_counter]);
+        printf("instruction = %08x\n", inst_curr);
         //filtering the opcodes first   
         switch (inst_curr & 0x7f) {
         case 0x37: {
@@ -362,9 +364,8 @@ int main() {
         }
         }
         registerfile[0] = 0;
-        printf("pc = %08x\n", program_counter);
         printf("registers\n");
-        for (int j = 0; j < 32;j++) {
+        for (int j = 0; j <= 32;j++) {
             printf("%08x\n", registerfile[j]);
         }
         printf("\n");
