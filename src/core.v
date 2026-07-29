@@ -37,7 +37,6 @@ module core(
     //wire nettypes
     wire [31:0] curr_inst, data_word_OUT;
     wire [31:0] result_alu;
-    integer i;
     // the outside world's window into the cpu
     assign state_out = state;
     //to be removed 
