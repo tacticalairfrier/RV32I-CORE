@@ -112,7 +112,7 @@ module core(
         alu_b = 32'h00000000;
         opcode = ADD;
         nextstate = state;
-        registerfile [0] = 32'h00000000;
+        // registerfile [0] = 32'h00000000;
         n_nop = nop;
         n_data_rw = data_rw;
         next_program_counter = program_counter;
