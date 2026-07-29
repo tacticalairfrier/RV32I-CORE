@@ -19,8 +19,10 @@ int main() {
     uint32_t index;
     //a simple for loop which does the part of reading every instruction over and over
     printf("instruction mem\n");
-    for (int i = 0; i < firmware_bytes_len; i++) {
-        printf(" %02x ", inst_arr[i]);
+    for (int i = 0; i < firmware_bytes_len / 4; i++) {
+        for (int j = 0; j < 4; j++) {
+            printf("%02x ", inst_arr[i * 4 + j]);
+        }
         printf("\n");
     }
     while (program_counter <= firmware_bytes_len) {
@@ -43,15 +45,15 @@ int main() {
         }
         case 0x6f: {
             //jal jump and link
-            registerfile[(inst_curr & 0xf80) >> 7] = program_counter += 4;
-            program_counter += ((inst_curr & 0x80000000 | (inst_curr & 0xff000) << 11 | (inst_curr & 0x100000) << 2 | (inst_curr & 0x7fe00000) >> 9) >> 11) | ((inst_curr & 0x80000000) ? (0xffe00000) : (0x00000000));
+            registerfile[(inst_curr & 0xf80) >> 7] = program_counter + 4;
+            program_counter += (((inst_curr & 0x80000000 | (inst_curr & 0xff000) << 11 | (inst_curr & 0x100000) << 2 | (inst_curr & 0x7fe00000) >> 9) >> 11) | ((inst_curr & 0x80000000) ? (0xffe00000) : (0x00000000)));
             break;
         }
         case 0x67: {
             //jump and link register jalr
             if ((inst_curr & 0x7000) >> 12 == 0) {
-                registerfile[(inst_curr & 0xf80) >> 7] = program_counter += 4;
-                program_counter = registerfile[(inst_curr & 0xf8000) >> 15] + (((inst_curr >> 20) & ~0x1) | ((inst_curr & 0x80000000) ? (0xfff00000) : (0x00000000)));
+                registerfile[(inst_curr & 0xf80) >> 7] = program_counter + 4;
+                program_counter = registerfile[(inst_curr & 0xf8000) >> 15] + (((inst_curr >> 20) & ~0x1) | ((inst_curr & 0x80000000) ? (0xfffff000) : (0x00000000)));
             }
             else {
                 program_counter += 4;
@@ -60,13 +62,14 @@ int main() {
         }
         case 0x63: {
             //branch cases
+            int debug_branch_dest = ((inst_curr & 0x80000000 | (inst_curr & 0x7e000000) >> 1 | (inst_curr & 0x80) << 22 | (inst_curr & 0xf00) << 12) >> 19) | ((inst_curr & 0x80000000) ? (0xffffe000) : (0x00000000));
             rs2 = registerfile[(inst_curr & 0x1f00000) >> 20];
             rs1 = registerfile[(inst_curr & 0xf8000) >> 15];
             switch ((inst_curr & 0x7000) >> 12) {
                 //beq -> branch if equal by offset
             case 0x0: {
                 if (rs1 == rs2) {
-                    program_counter += ((inst_curr & 0x80000000 | (inst_curr & 0x7e000000) >> 1 | (inst_curr & 0x80) << 22 | (inst_curr & 0xf00) << 11) >> 19) | ((inst_curr & 0x80000000) ? (0xffffe000) : (0x00000000));
+                    program_counter += ((inst_curr & 0x80000000 | (inst_curr & 0x7e000000) >> 1 | (inst_curr & 0x80) << 22 | (inst_curr & 0xf00) << 12) >> 19) | ((inst_curr & 0x80000000) ? (0xffffe000) : (0x00000000));
                 }
                 else {
                     program_counter += 4;
@@ -76,7 +79,7 @@ int main() {
             case 0x1: {
                 //bne -> branch if not equal by offset
                 if (rs1 != rs2) {
-                    program_counter += ((inst_curr & 0x80000000 | (inst_curr & 0x7e000000) >> 1 | (inst_curr & 0x80) << 22 | (inst_curr & 0xf00) << 11) >> 19) | ((inst_curr & 0x80000000) ? (0xffffe000) : (0x00000000));
+                    program_counter += ((inst_curr & 0x80000000 | (inst_curr & 0x7e000000) >> 1 | (inst_curr & 0x80) << 22 | (inst_curr & 0xf00) << 12) >> 19) | ((inst_curr & 0x80000000) ? (0xffffe000) : (0x00000000));
                 }
                 else {
                     program_counter += 4;
@@ -86,7 +89,7 @@ int main() {
             case 0x4: {
                 //blt ->branch if less than by offse
                 if (rs1 < rs2) {
-                    program_counter += ((inst_curr & 0x80000000 | (inst_curr & 0x7e000000) >> 1 | (inst_curr & 0x80) << 22 | (inst_curr & 0xf00) << 11) >> 19) | ((inst_curr & 0x80000000) ? (0xffffe000) : (0x00000000));
+                    program_counter += ((inst_curr & 0x80000000 | (inst_curr & 0x7e000000) >> 1 | (inst_curr & 0x80) << 22 | (inst_curr & 0xf00) << 12) >> 19) | ((inst_curr & 0x80000000) ? (0xffffe000) : (0x00000000));
                 }
                 else {
                     program_counter += 4;
@@ -96,7 +99,7 @@ int main() {
             case 0x5: {
                 //bge -> branch if greater than or equal to 
                 if (rs1 >= rs2) {
-                    program_counter += ((inst_curr & 0x80000000 | (inst_curr & 0x7e000000) >> 1 | (inst_curr & 0x80) << 22 | (inst_curr & 0xf00) << 11) >> 19) | ((inst_curr & 0x80000000) ? (0xffffe000) : (0x00000000));
+                    program_counter += ((inst_curr & 0x80000000 | (inst_curr & 0x7e000000) >> 1 | (inst_curr & 0x80) << 22 | (inst_curr & 0xf00) << 12) >> 19) | ((inst_curr & 0x80000000) ? (0xffffe000) : (0x00000000));
                 }
                 else {
                     program_counter += 4;
@@ -106,7 +109,7 @@ int main() {
             case 0x6: {
                 //bltu -> branch less than unsigned
                 if (registerfile[(inst_curr & 0xf8000) >> 15] < registerfile[(inst_curr & 0x1f00000) >> 20]) {
-                    program_counter += ((inst_curr & 0x80000000 | (inst_curr & 0x7e000000) >> 1 | (inst_curr & 0x80) << 22 | (inst_curr & 0xf00) << 11) >> 19) | ((inst_curr & 0x80000000) ? (0xffffe000) : (0x00000000));
+                    program_counter += ((inst_curr & 0x80000000 | (inst_curr & 0x7e000000) >> 1 | (inst_curr & 0x80) << 22 | (inst_curr & 0xf00) << 12) >> 19) | ((inst_curr & 0x80000000) ? (0xffffe000) : (0x00000000));
                 }
                 else {
                     program_counter += 4;
@@ -116,7 +119,7 @@ int main() {
             case 0x7: {
                 //bgeu -> branch greater than unsigned
                 if (registerfile[(inst_curr & 0xf8000) >> 15] >= registerfile[(inst_curr & 0x1f00000) >> 20]) {
-                    program_counter += ((inst_curr & 0x80000000 | (inst_curr & 0x7e000000) >> 1 | (inst_curr & 0x80) << 22 | (inst_curr & 0xf00) << 11) >> 19) | ((inst_curr & 0x80000000) ? (0xffffe000) : (0x00000000));
+                    program_counter += ((inst_curr & 0x80000000 | (inst_curr & 0x7e000000) >> 1 | (inst_curr & 0x80) << 22 | (inst_curr & 0xf00) << 12) >> 19) | ((inst_curr & 0x80000000) ? (0xffffe000) : (0x00000000));
                 }
                 else {
                     program_counter += 4;
@@ -367,11 +370,16 @@ int main() {
         printf("\n");
     }
     printf("memory\n");
-    for (int i = 0; i < 8; i++) {
-        for (int j = i * 10; j < i * 10 + 10;j++) {
+    for (int i = 0; i < 10; i++) {
+        for (int j = i * 8; j < i * 8 + 8;j++) {
             printf(" %02x ", mem_arr[j]);
         }
         printf("\n");
+    }
+    FILE* ptr;
+    ptr = fopen("memory_ref.txt", "w");
+    for (int i = 0;i < 80;i++) {
+        fprintf(ptr, "%02x\n", mem_arr[i]);
     }
     //or instruction cache
 }
