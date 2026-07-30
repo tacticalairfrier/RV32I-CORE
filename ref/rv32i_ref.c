@@ -28,7 +28,8 @@ int main() {
     while (program_counter <= firmware_bytes_len) {
         // //copying over the instruction into a temporary current instruction array because well i need to bitshift to hell
         printf("pc = %08x\n", program_counter);
-        inst_curr = (inst_arr[program_counter + 3] << 24 | inst_arr[program_counter + 2] << 16 | inst_arr[program_counter + 1] << 8 | inst_arr[program_counter]);
+        // inst_curr = (inst_arr[program_counter + 3] << 24 | inst_arr[program_counter + 2] << 16 | inst_arr[program_counter + 1] << 8 | inst_arr[program_counter]);
+        inst_curr = inst_arr[program_counter >> 2];
         printf("instruction = %08x\n", inst_curr);
         //filtering the opcodes first   
         switch (inst_curr & 0x7f) {
@@ -379,8 +380,12 @@ int main() {
     }
     FILE* ptr;
     ptr = fopen("memory_ref.txt", "w");
-    for (int i = 0;i < 80;i++) {
-        fprintf(ptr, "%02x\n", mem_arr[i]);
+    for (int i = 0;i < 20;i++) {
+        for (int j = i * 4 + 3; j >= i * 4;j--) {
+            fprintf(ptr, "%02x", mem_arr[j]);
+        }
+        fprintf(ptr, "\n");
     }
     //or instruction cache
+    fclose(ptr);
 }
