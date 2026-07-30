@@ -1,6 +1,6 @@
 #!/bin/bash
 # AI USE DISCLOSURE: GEMINI AI WAS USED TO GENERATE THIS FIRMWARE -> TO -> .H CONVERTER
-# Usage check
+
 if [ "$#" -ne 1 ]; then
     echo "Usage: $0 <path_to_memory_dump.hex>"
     exit 1
@@ -14,21 +14,22 @@ if [ ! -f "$INPUT_FILE" ]; then
     exit 1
 fi
 
-# 1. Strip comments, clear empty lines, and read all hex tokens into a Bash array
+# 1. Extract non-comment hex tokens
 HEX_TOKENS=($(sed 's/\/\/.*//g' "$INPUT_FILE" | tr -d '\r'))
 
-# 2. Compute byte count
-TOTAL_BYTES=${#HEX_TOKENS[@]}
+# 2. Calculate word and byte counts
+TOTAL_WORDS=${#HEX_TOKENS[@]}
+TOTAL_BYTES=$((TOTAL_WORDS * 4))
 
-# 3. Format the array items with 0x prefix, 16 per line
-FORMATTED_BYTES=""
+# 3. Format words with 0x prefix, 4 words (128 bits) per line for clean readability
+FORMATTED_WORDS=""
 COUNT=0
 
 for token in "${HEX_TOKENS[@]}"; do
-    FORMATTED_BYTES+="0x${token}, "
+    FORMATTED_WORDS+="0x${token}, "
     COUNT=$((COUNT + 1))
-    if [ $((COUNT % 16)) -eq 0 ]; then
-        FORMATTED_BYTES+=$'\n    '
+    if [ $((COUNT % 4)) -eq 0 ]; then
+        FORMATTED_WORDS+=$'\n    '
     fi
 done
 
@@ -39,16 +40,16 @@ cat << EOF > "$OUTPUT_FILE"
 
 #include <stdint.h>
 
-// AI DISCLOSURE: AN AI GENERATED SCRIPT WAS USED TO GENERATE THIS PART OF THE CODE
-// Total byte count
+// Total byte count & word count
 const uint32_t firmware_bytes_len = ${TOTAL_BYTES};
+const uint32_t firmware_words_len = ${TOTAL_WORDS};
 
-const uint8_t inst_arr[] = {
-    ${FORMATTED_BYTES}
+const uint32_t inst_arr[] = {
+    ${FORMATTED_WORDS}
 };
 
 #endif // FIRMWARE_H
 EOF
 
 echo "Successfully converted '$INPUT_FILE' -> '$OUTPUT_FILE'"
-echo "Stats: $TOTAL_BYTES bytes total"
+echo "Stats: $TOTAL_WORDS words ($TOTAL_BYTES bytes total)"
