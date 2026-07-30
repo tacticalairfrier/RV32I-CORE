@@ -64,6 +64,7 @@ module core(
             program_counter <= 32'h0;
             state <= RESET;
             instword <= 32'h00000000;
+            registerfile [0] <= 32'h00000000;
             nop  <= `FALSE;
         end
         else begin
@@ -89,7 +90,7 @@ module core(
                         3'h1: registerfile[instword[11:7]] <= {{16{data_word_OUT[15]}}, data_word_OUT[15:0]};
                         3'h2: registerfile[instword[11:7]] <= data_word_OUT;
                         3'h4: registerfile[instword[11:7]] <= {24'h000000, data_word_OUT[7:0]};
-                        3'h5: registerfile[instword[11:7]] <= {16'h000000, data_word_OUT[15:0]};
+                        3'h5: registerfile[instword[11:7]] <= {16'h0000, data_word_OUT[15:0]};
                         endcase
                     end
                     ARM_IMM: registerfile[instword[11:7]] <= result_alu;
@@ -112,7 +113,6 @@ module core(
         alu_b = 32'h00000000;
         opcode = ADD;
         nextstate = state;
-        // registerfile [0] = 32'h00000000;
         n_nop = nop;
         n_data_rw = data_rw;
         next_program_counter = program_counter;
