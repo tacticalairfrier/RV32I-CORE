@@ -19,11 +19,8 @@ int main() {
     uint32_t index;
     //a simple for loop which does the part of reading every instruction over and over
     printf("instruction mem\n");
-    for (int i = 0; i < firmware_bytes_len / 4; i++) {
-        for (int j = 0; j < 4; j++) {
-            printf("%02x ", inst_arr[i * 4 + j]);
-        }
-        printf("\n");
+    for (int i = 0; i < firmware_words_len; i++) {
+        printf("%08x\n", inst_arr[i]);
     }
     while (program_counter <= firmware_bytes_len) {
         // //copying over the instruction into a temporary current instruction array because well i need to bitshift to hell
