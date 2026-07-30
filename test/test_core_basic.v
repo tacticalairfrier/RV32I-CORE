@@ -8,6 +8,7 @@ reg clkin, reset;
 wire [2:0] state;
 wire [1:0] flags;
 integer i;
+integer j;
 core RV32I_00(
     .clkin(clkin),
     .reset(reset),
@@ -30,7 +31,13 @@ initial begin
     for(i=0;i<40;i=i+1)begin
         $dumpvars(0, RV32I_00.MEM_0.dat_mem[i]);
     end
+    j = $fopen("test/memory.txt", "w");
     #6600;
+    //dumping the first 80 memory addresses directly into memory.txt
+    for(i=0;i<20;i=i+1)begin
+        $fdisplay(j,"%h",RV32I_00.MEM_0.dat_mem[i]);
+    end
+    $fclose(j);
     $finish;
 end
 endmodule
