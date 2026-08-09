@@ -7,8 +7,10 @@ module core(
     /* verilator lint_off WIDTHEXPAND */
     /* verilator lint_off CASEINCOMPLETE */
     //debug inst
+    input wire [7:0] gpio_core_in,
     input wire clkin, reset,
     //debug outputs
+    output wire [7:0] gpio_core_out,
     output wire [2:0] state_out,
     output wire [1:0] flags
     );
@@ -37,8 +39,10 @@ module core(
     //wire nettypes
     wire [31:0] curr_inst, data_word_OUT;
     wire [31:0] result_alu;
+    wire [31:0] gpio_core_out_wire;
     // the outside world's window into the cpu
     assign state_out = state;
+    assign gpio_core_out = gpio_core_out_wire[7:0];
     //to be removed 
     //initialising the modules 
     memory MEM_0 (
@@ -49,7 +53,9 @@ module core(
         .clkin(clkin),
         .dat_rw(data_rw),
         .instword(curr_inst),
-        .datwordout(data_word_OUT)
+        .datwordout(data_word_OUT),
+        .gpio_in({24'h0000000, gpio_core_in}),
+        .gpio_out(gpio_core_out_wire)
     );
     alu ALU_0 (
         .oper_a(alu_a),
