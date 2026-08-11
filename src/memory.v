@@ -28,10 +28,12 @@ reg [31:0] gpio_mmio_out; //ONLY FOR WRITES
 reg [31:0] mem_write_reg;
 reg [31:0] gpio_write_reg;
 wire [3:0] memcode;
+wire rw_correct;
 //continuous assignments
 assign memcode = {address_dat[12], address_dat[2], dat_rw};
 assign gpio_out = gpio_mmio_out;
 assign datwordout = (memcode == 4'b0010||memcode == 4'b0110)?(mem_write_reg):(gpio_write_reg);
+assign rw_correct = (memcode == 4'b0001||memcode == 4'b0101);
 //map 0x0000->0x0fff = general data, 0x1000->0x1004 = gpio_in, gpio_out 
 //putting the firmware inside the ins_mem
 //not possible in asic only for yosys/vivado
@@ -50,7 +52,7 @@ always@(posedge clkin)begin
     //dat_rw = 01 = write
     // {dat_mem[address_dat+3], dat_mem[address_dat+2], dat_mem[address_dat+1], dat_mem[address_dat]}
     // {dat_mem[address_dat+3], dat_mem[address_dat+2], dat_mem[address_dat+1], dat_mem[address_dat]};
-    if(dat_rw == 2'b01) dat_mem[address_dat[11:2]] <= datawordin; //write
+    if(rw_correct) dat_mem[address_dat[11:2]] <= datawordin; //write
     if(dat_rw == 2'b10) mem_write_reg <= dat_mem[address_dat[31:2]]; //read
     //rw = 0 means read requested
     // case(memcode)
