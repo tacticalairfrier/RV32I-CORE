@@ -41,11 +41,11 @@ initial begin
     //readmemh for firmware
     $readmemh("firmware.hex", ins_mem);
 end
-always@(posedge clkin)begin
+always@(posedge clkin) instword <= ins_mem[{2'b00, address_inst[31:2]}];    //dat_rw data given as is\
+always@(posedge clkin)begin 
     //defining the instword output right now
     //lil endian thing changed back into big endian for just the instruction memory
     // instword <= {ins_mem[address_inst+3], ins_mem[address_inst+2], ins_mem[address_inst+1], ins_mem[address_inst]};
-    instword <= ins_mem[{2'b00, address_inst[31:2]}];    //dat_rw data given as is\
     //gpio mmio input latches on every clock cycle to the gpio input wires
     //rw = 1 means write requested
     //dat_rw = 10 = read
