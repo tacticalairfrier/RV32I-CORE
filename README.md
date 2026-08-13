@@ -96,7 +96,13 @@ Output artifacts from a differential-testing run, used to compare the RTL agains
 
 This core was built golden-model-first: `ref/rv32i_ref.c` is a hand-written C reference model / ISS, and every instruction that's been exercised so far has been differentially checked against it, not just eyeballed for "looks about right." Correctness so far rests on two legs — waveform inspection from `test_core_basic.v`, and instruction-by-instruction diffing of RTL execution against the reference model, concretely captured in `memdump/`: the RTL's memory dump (`memory.txt`) is compared word-for-word against the reference model's memory dump (`memory_ref.txt`) for the same run, and when the two disagree, the reference model's full per-cycle pc/instruction/register trace (`trace.txt`) is used to pin down the exact instruction where RTL execution diverged from the golden model.
 
-That's a real verification discipline, not just ad-hoc poking — but it's still bring-up-stage, not sign-off-stage. Right now the diff-and-trace comparison itself is a manual step (run the sim, generate both dumps, diff them, eyeball the trace on a mismatch) rather than an automated regression check, and coverage is bounded by which instructions and operand values someone thought to run through the reference model, tracked loosely through commit history rather than a maintained record — so there's no single file or suite yet that states definitively what has and hasn't been checked. Closing that gap — scripting the dump/diff/trace-lookup into an automatic pass/fail, and making coverage legible and exhaustive — is exactly what the next steps below are for.
+That's real verification, not eyeballing — but it's still bring-up-stage, not
+sign-off. The diff-and-trace comparison is currently manual: run the sim,
+generate both dumps, diff them, and consult the trace on mismatch. Coverage
+is informal too — which instructions and operand values have been exercised
+is tracked loosely through commit history, not a maintained record. The next
+steps below close both gaps: scripting the dump/diff into an automatic
+pass/fail check, and making coverage tracking explicit.
 
 Planned next steps for this repo:
 - Run the [riscv-arch-test](https://github.com/riscv-non-isa/riscv-arch-test) compliance suite against the core
