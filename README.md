@@ -154,6 +154,20 @@ specifically to get clean BRAM inference on both of these targets.
 Resource utilization, timing closure, and full BRAM inference reports will
 be added here as bring-up progresses.
 
+### iCE40 top-level and build flow (`ice40up50k/`)
+
+FPGA-specific top module and build artifacts for the iCE40 target live in
+`ice40up50k/`:
+
+- `ice40up50k/top.v` — top-level wrapper instantiating the core, wiring
+  clock/reset and board I/O (LEDs, etc.) for the iCE40UP5K target.
+- `ice40up50k/Makefile` — drives synthesis (`yosys`), place-and-route
+  (`nextpnr-ice40`), and bitstream generation (`icepack`)/programming
+  (`iceprog`) for this target.
+- `ice40up50k/firmware.hex` — the assembled/linked firmware image (see
+  Assembly → firmware.hex above) loaded into imem/dmem via `$readmemh`
+  for this target's build.
+  
 ## What I've learnt
 
 1. Even a basic, minimal implementation gives real insight into computer architecture — decisions that look trivial on paper (like memory array width) have concrete synthesis consequences.
