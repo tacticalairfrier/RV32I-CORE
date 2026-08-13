@@ -80,6 +80,26 @@ vvp sim_mem
 
 `firmware.hex` must be present in the working directory the simulator is run from (`memory.v` loads it via a relative path) — that is the repository root folder. Make sure it was generated at 32-bit word width (`--verilog-data-width 4`); a byte-width hex file will not load correctly into the current memory model.
 
+### Assembly → firmware.hex
+
+Assembly sources are assembled and linked with the RISC-V GCC toolchain
+(bare-metal `rv32i`/`ilp32` target, no linker script — entry point set
+directly via `-e _start`), then converted to a Verilog hex file for
+`$readmemh` with `objcopy`:
+
+```bash
+riscv64-unknown-elf-as -march=rv32i -mabi=ilp32 file.S -o file.o
+riscv64-unknown-elf-ld -m elf32lriscv -Ttext=0x0 -e _main file.o -o file.elf
+riscv64-unknown-elf-objcopy -O verilog --verilog-data-width 4 file.elf firmware.hex
+```
+
+The `--verilog-data-width 4` flag matters because of the memory-width change
+described above: imem/dmem are 32-bit-wide word arrays (not byte arrays), so
+`objcopy` needs to pack 4 bytes per output line to match. Without it,
+`objcopy` emits one byte per line by default, which mismatches the memory's
+word width and either fails `$readmemh` or silently loads garbage into every
+word.
+
 ## `memdump/`
 
 Output artifacts from a differential-testing run, used to compare the RTL against the golden C reference model:
