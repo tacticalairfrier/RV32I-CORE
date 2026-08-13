@@ -102,10 +102,31 @@ Planned next steps for this repo:
 - Run the [riscv-arch-test](https://github.com/riscv-non-isa/riscv-arch-test) compliance suite against the core
 - Constrained-random instruction generation with functional coverage closure, still diffed against the reference model
 - Formal verification via [riscv-formal](https://github.com/YosysHQ/riscv-formal) (SymbiYosys/Yosys), once an RVFI-compliant retirement interface is added to `core.v`
-
+  
 ## Physical Implementation
 
-The design has so far been verified only in simulation. Bring-up on real FPGA silicon is planned next, targeting two devices: `ICE40UP5K` and `XC7A35T-1CPG236C`. The memory-width change above was made specifically to get clean BRAM inference on both of these targets — findings from the actual FPGA bring-up (resource utilization, timing, BRAM inference reports) will be added here once available.
+Bring-up on real FPGA silicon is underway, targeting two devices:
+`ICE40UP5K` and `XC7A35T-1CPG236C`. The memory-width change above was made
+specifically to get clean BRAM inference on both of these targets.
+
+### Bring-up findings (preliminary)
+
+- **Basys3 (XC7A35T-1CPG236C):** 1684 LUTs. BRAM successfully inferred for
+  both imem and dmem.
+- **iCE40UP5K:** 3063 LUTs. BRAM inferred for both imem and dmem as well.
+  The register file (sync-write, async-read) is a no-op for Vivado, which
+  maps it to cheap LUTRAM/distributed RAM without complaint. yosys/nextpnr
+  targeting iCE40 does not infer LUTRAM as readily for that async-read
+  pattern, so the async-read 31-entry register file was instead getting
+  expanded into a wide mux tree plus discrete FFs, driving LUT usage up to
+  ~4200. Cutting to RV32E (16 registers) shrank the async-read mux width
+  enough to bring this down to 3063 LUTs. Settled on RV32E on this target
+  for the time being.
+- Wrote a small LED-blink program in assembly and tested it on both boards
+  (`assembly/blink.asm`).
+
+Resource utilization, timing closure, and full BRAM inference reports will
+be added here as bring-up progresses.
 
 ## What I've learnt
 
