@@ -9,7 +9,7 @@ NTHREADS=$(shell nproc)
 VERILOG_FILE=top.v core.v alu.v memory.v
 # riscv assembly compile
 compile: code.S
-	riscv64-unknown-elf-as -march=rv32e -mabi=ilp32e code.S -o code.o
+	riscv64-unknown-elf-as -march=rv32 -mabi=ilp32 code.S -o code.o
 	riscv64-unknown-elf-ld -m elf32lriscv -Ttext=0x0 -e _main code.o -o firmware.elf
 	riscv64-unknown-elf-objcopy -O verilog --verilog-data-width 4 firmware.elf firmware.hex
 build: firmware.hex
