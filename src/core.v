@@ -23,7 +23,7 @@ module core(
     //fsm operator regs
     //alu oper_a is always rs1, and oper_b is always rs2
     //the registerfile for the core, 32 bits wide, 31 deep 0x0 will be tied to 0
-    reg [31:0] registerfile [0:31];
+    // reg [31:0] registerfile [0:31];
     reg [31:0] program_counter, next_program_counter;
     reg [31:0] A, B, result;
     //memory interface
@@ -31,18 +31,28 @@ module core(
     //alu
     reg [31:0] instword;
     reg [31:0] alu_a, alu_b;
+    reg [31:0] return_dest;
     reg [3:0] opcode, OPC;
     reg [2:0] state, nextstate;
     reg [1:0] data_rw, n_data_rw;
     //a nop reg, when its high the instruction is supposed to be a nop
-    reg n_nop, nop;
+    reg n_nop, nop, write_enable;
     //wire nettypes
     wire [31:0] curr_inst, data_word_OUT;
     wire [31:0] result_alu;
     wire [31:0] gpio_core_out_wire;
+    wire [31:0] rs1_latch, rs2_latch;
+    wire [4:0] rs1, rs2, rd;
+    wire read_enable;
     // the outside world's window into the cpu
     assign state_out = state;
     assign gpio_core_out = gpio_core_out_wire[7:0];
+    assign rs2 = instword[24:20];
+    assign rs1 = instword[19:15];
+    assign rd = instword[11:7];
+    // assign read_enable = (state == FETCH||state == DECODE);
+    // assign write_enable = (state == WRITEBACK||state == FETCH);
+    assign read_enable = (state == FETCH);
     //to be removed 
     //initialising the modules 
     memory MEM_0 (
@@ -64,13 +74,24 @@ module core(
         .result(result_alu),
         .flags(flags)
     );
+    registerfile REG_0(
+        .rd_in(return_dest),
+        .rs1(rs1),
+        .rs2(rs2),
+        .rd(rd),
+        .clkin(clkin),
+        .write_enable(write_enable),
+        .read_enable(read_enable),
+        .rs1_mod(rs1_latch),
+        .rs2_mod(rs2_latch)
+    );
     //fsm
     always@(posedge clkin)begin
         if(!reset)begin
             program_counter <= 32'h0;
             state <= RESET;
             instword <= 32'h00000000;
-            registerfile [0] <= 32'h00000000;
+            // registerfile [0] <= 32'h00000000;
             nop  <= `FALSE;
         end
         else begin
@@ -83,28 +104,28 @@ module core(
             data_word_IN <= n_data_word_IN;
             if(nextstate==FETCH) instword <= curr_inst;
             //this makes it so that the registerfile is inferred as sram rather than transperant latches
-            if(nextstate==WRITEBACK)begin
-                case(instword[6:0])
-                    LUI: registerfile[instword[11:7]] <= {instword[31:12], 12'h000};
-                    //lui path fetch -> decode ->execute->writeback
-                    AUIPC: registerfile[instword[11:7]] <= result_alu;
-                    JAL: registerfile[instword[11:7]] <= result_alu;
-                    JALR: registerfile[instword[11:7]] <= result_alu;
-                    LOAD: begin
-                        case(instword[14:12])
-                        3'h0: registerfile[instword[11:7]] <= {{24{data_word_OUT[7]}}, data_word_OUT[7:0]};
-                        3'h1: registerfile[instword[11:7]] <= {{16{data_word_OUT[15]}}, data_word_OUT[15:0]};
-                        3'h2: registerfile[instword[11:7]] <= data_word_OUT;
-                        3'h4: registerfile[instword[11:7]] <= {24'h000000, data_word_OUT[7:0]};
-                        3'h5: registerfile[instword[11:7]] <= {16'h0000, data_word_OUT[15:0]};
-                        endcase
-                    end
-                    ARM_IMM: registerfile[instword[11:7]] <= result_alu;
-                    ARM_RR: registerfile[instword[11:7]] <= result_alu;
-                endcase
-                //registerfile cleanup
-                registerfile[0] <= 32'h0000_0000;
-            end
+            // if(nextstate==WRITEBACK)begin
+            //     case(instword[6:0])
+            //         LUI: registerfile[instword[11:7]] <= {instword[31:12], 12'h000};
+            //         //lui path fetch -> decode ->execute->writeback
+            //         AUIPC: registerfile[instword[11:7]] <= result_alu;
+            //         JAL: registerfile[instword[11:7]] <= result_alu;
+            //         JALR: registerfile[instword[11:7]] <= result_alu;
+            //         LOAD: begin
+            //             case(instword[14:12])
+            //             3'h0: registerfile[instword[11:7]] <= {{24{data_word_OUT[7]}}, data_word_OUT[7:0]};
+            //             3'h1: registerfile[instword[11:7]] <= {{16{data_word_OUT[15]}}, data_word_OUT[15:0]};
+            //             3'h2: registerfile[instword[11:7]] <= data_word_OUT;
+            //             3'h4: registerfile[instword[11:7]] <= {24'h000000, data_word_OUT[7:0]};
+            //             3'h5: registerfile[instword[11:7]] <= {16'h0000, data_word_OUT[15:0]};
+            //             endcase
+            //         end
+            //         ARM_IMM: registerfile[instword[11:7]] <= result_alu;
+            //         ARM_RR: registerfile[instword[11:7]] <= result_alu;
+            //     endcase
+            //     //registerfile cleanup
+            //     registerfile[0] <= 32'h0000_0000;
+            // end
             //check the pc and pc latched logic
             // pc_latched <= program_counter;
             //simple thing done here, the result for memory must only be the memory address
@@ -117,14 +138,15 @@ module core(
         OPC = ADD;
         alu_a = 32'h00000000;
         alu_b = 32'h00000000;
+        return_dest = 32'h00000000;
         opcode = ADD;
         nextstate = state;
         n_nop = nop;
         n_data_rw = data_rw;
         next_program_counter = program_counter;
-        //
         n_address_dat = address_dat;
         n_data_word_IN = data_word_IN;
+        write_enable = `FALSE;
         if(!reset)begin
             nextstate = FETCH;
             next_program_counter = 0;
@@ -159,14 +181,14 @@ module core(
                     OPC = ADD;
                 end
                 JALR: begin
-                    A = registerfile[instword[19:15]];
+                    A = rs1_latch;
                     B = {{20{instword[31]}}, instword[31:20]};
                     OPC = ADD;
                 end
                 BRANCH: begin
                     // a and b are rs1 and rs2 rspectively using r-type instruction format
-                    A = registerfile[instword[19:15]];
-                    B = registerfile[instword[24:20]];
+                    A = rs1_latch;
+                    B = rs2_latch;
                     case(instword[14:12])
                     //beq -> take the branch if equal to 
                     3'h0: OPC = EQL;
@@ -187,7 +209,7 @@ module core(
                     //data rw is true because ur loading data inside
                     n_data_rw = 2'b10;
                     //A is the rs1 and b is the immediate instruction field using i-type field
-                    A = registerfile[instword[19:15]];
+                    A = rs1_latch;
                     B = {{20{instword[31]}}, instword[31:20]}; //sign-extended
                     //not taking f3 field here as its always going to be an add instruction
                     OPC =  ADD;
@@ -197,7 +219,7 @@ module core(
                 STORE: begin
                     n_data_rw = 2'b01; ///latch
                     //decode for the s-type instruction
-                    A = registerfile[instword[19:15]];
+                    A = rs1_latch;
                     B = {{20{instword[31]}} ,instword[31:25], instword[11:7]};
                     OPC = ADD;
                     nextstate = EXECUTE;
@@ -263,15 +285,15 @@ module core(
                         //case statement
                         n_address_dat = result; /// latch needed, 
                         case(instword[14:12])
-                        3'h0:n_data_word_IN = {24'h000000, registerfile[instword[24:20]][7:0]}; //latch needed
-                        3'h1:n_data_word_IN = {16'h0000, registerfile[instword[24:20]][15:0]};
-                        3'h2:n_data_word_IN = registerfile[instword[24:20]];
+                        3'h0:n_data_word_IN = {24'h000000, rs2_latch[7:0]}; //latch needed
+                        3'h1:n_data_word_IN = {16'h0000, rs2_latch[15:0]};
+                        3'h2:n_data_word_IN = rs2_latch;
                         endcase
                         nextstate = MEMORY;
                     end
                     ARM_IMM:begin
                         next_program_counter = result;
-                        A = registerfile[instword[19:15]];
+                        A = rs1_latch;
                         B = {{20{instword[31]}}, instword[31:20]};
                         case(instword[14:12])
                             ///case block is just useful for setting the opcode
@@ -292,8 +314,8 @@ module core(
                     end
                     ARM_RR: begin
                         next_program_counter = result;
-                        A = registerfile[instword[19:15]];
-                        B = registerfile[instword[24:20]];
+                        A = rs1_latch;
+                        B = rs2_latch;
                         case(instword[14:12])
                             3'h0:begin
                                 if(instword[31:25] == 7'h00) OPC = ADD;
@@ -352,7 +374,28 @@ module core(
                 nextstate = WRITEBACK;
                 //handling only 2 states coz only 2 states can bring here  
             end
-            WRITEBACK: nextstate = FETCH;
+            WRITEBACK:begin
+                nextstate = FETCH;
+                write_enable = `TRUE;
+                case(instword[6:0])
+                    LUI: return_dest = {instword[31:12], 12'h000};
+                    AUIPC: return_dest = result;
+                    JAL: return_dest = result;
+                    JALR: return_dest = result;
+                    LOAD: begin
+                        case(instword[14:12])
+                        3'h0: return_dest = {{24{data_word_OUT[7]}}, data_word_OUT[7:0]};
+                        3'h1: return_dest = {{16{data_word_OUT[15]}}, data_word_OUT[15:0]};
+                        3'h2: return_dest = data_word_OUT;
+                        3'h4: return_dest = {24'h000000, data_word_OUT[7:0]};
+                        3'h5: return_dest = {16'h0000, data_word_OUT[15:0]};
+                        endcase
+                    end
+                    ARM_IMM: return_dest = result;
+                    ARM_RR: return_dest = result;
+                    default: write_enable = `FALSE;
+                endcase
+            end
                 //alu use will not happen in the writeback and memory state
                 //registerfile always stays synced to the clock posedge and thus stays syncronous
                 //IN this stage only can the registerfile be written
