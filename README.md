@@ -137,17 +137,17 @@ specifically to get clean BRAM inference on both of these targets.
 
 ### Bring-up findings (preliminary)
 
-- **Basys3 (XC7A35T-1CPG236C):** 1684 LUTs. BRAM successfully inferred for
+- **Basys3 (XC7A35T-1CPG236C):** 772 LUT6s. BRAM successfully inferred for
   both imem and dmem.
-- **iCE40UP5K:** 3063 LUTs. BRAM inferred for both imem and dmem as well.
-  The register file (sync-write, async-read) is a no-op for Vivado, which
-  maps it to cheap LUTRAM/distributed RAM without complaint. yosys/nextpnr
-  targeting iCE40 does not infer LUTRAM as readily for that async-read
-  pattern, so the async-read 31-entry register file was instead getting
-  expanded into a wide mux tree plus discrete FFs, driving LUT usage up to
-  ~4200. Cutting to RV32E (16 registers) shrank the async-read mux width
-  enough to bring this down to 3063 LUTs. Settled on RV32E on this target
-  for the time being.
+- **iCE40UP5K:** 1479 ICESTORM_LCs. BRAM inferred for both imem and dmem
+  as well. The register file (sync-write, async-read) is a no-op for
+  Vivado, which maps it to cheap LUTRAM/distributed RAM without complaint.
+  yosys/nextpnr targeting iCE40 does not infer LUTRAM as readily for that
+  async-read pattern, so the async-read register file was instead getting
+  expanded into a wide mux tree plus discrete FFs, driving LUT usage up
+  significantly. Reworked the register file to map into BRAM on iCE40
+  instead, bringing usage down to the figures above. Timing closes at
+  20 MHz on iCE40 with this change.
 - Wrote a small LED-blink program in assembly and tested it on both boards
   (`assembly/blink.asm`).
 
