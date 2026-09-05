@@ -3,43 +3,26 @@
 `define FALSE 1'b0
 
 module top(
-    input wire clkin,
+    input wire clock_source,
     output wire [2:0] led,
     output wire [7:0] gpio_out
 );
-reg [23:0] reset_cnt = 24'hfff_fff;
-reg reset;
+wire reset;
 wire clkin;
-SB_HFOSC #(
-    .CLKHF_DIV("0b10"))
-u_SB_HFOSC(
-    .CLKHFPU(`TRUE), 
-    .CLKHFEN(`TRUE), 
-    .CLKHF(clkin)
+pll clkgen(
+    .clock_in(clock_source),
+    .clock_out(clkin),
+    .locked(reset)
 );
-// SB_LFOSC osc(
-//     .CLKLFPU(`TRUE),
-//     .CLKLFEN(`TRUE),
-//     .CLKLF(clkin)
-// );
 core C_RV_00(
     .clkin(clkin),
     .reset(reset),
     .gpio_core_out(gpio_out)
 );
-always@(posedge clkin)begin
-    if(reset_cnt>0)begin
-        reset_cnt <= reset_cnt-1;
-        reset <= `FALSE;
-    end
-    else begin
-        reset <= `TRUE;
-    end
-end
   SB_RGBA_DRV RGB_DRIVER (
     .RGBLEDEN(`TRUE),
     .RGB0PWM (`FALSE),
-    .RGB1PWM (`FALSE),
+    .RGB1PWM (~reset),
     .RGB2PWM (|gpio_out),
     .CURREN  (`TRUE),
     .RGB0    (led[0]), //Actual Hardware connection
