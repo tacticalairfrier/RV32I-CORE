@@ -5,9 +5,7 @@
 module alu(
     input wire [31:0] oper_a, oper_b,
     input wire [3:0] opcode,
-    output reg [31:0] result,
-    //flags C,Z,N,O -> negitive, overflow
-    output reg [1:0] flags
+    output reg [31:0] result
 );
 /* verilator lint_off WIDTHEXPAND */
 /* verilator lint_off EOFNEWLINE */
@@ -34,28 +32,23 @@ OR = 4'h4,
 XOR = 4'h3;
 always@(*)begin
     result = 32'h00000000;
-    flags = 2'b00;
     case(opcode)
     //unsigned operations arent negitive/positive i.e bitwise so no allocation to them
     XOR: result = oper_a ^ oper_b;
     OR: result = oper_a | oper_b;
     AND: result = oper_a & oper_b;
     ADD:begin
-        {flags[0], result} = oper_a + oper_b;
-        flags[1] = result[31];
+        result = oper_a + oper_b;
     end
     SUB:begin
         result = oper_a - oper_b;
-        flags[1] = result[31];
     end
     SLL:begin
         result = oper_a << oper_b[4:0];
-        flags[1] = result[31];
     end
     SRR: result = oper_a >> oper_b[4:0];
     SRA: begin
         result = $signed(oper_a) >>> oper_b[4:0];
-        flags[1] = result[31];
     end
     EQL: result = (oper_a==oper_b);
     SLT: result = ($signed(oper_a) < $signed(oper_b));

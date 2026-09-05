@@ -5,15 +5,11 @@
 
 module test_rv32i_basic;
 reg clkin, reset;
-wire [2:0] state;
-wire [1:0] flags;
 integer i;
 integer j;
 core RV32I_00(
     .clkin(clkin),
-    .reset(reset),
-    .state_out(state),
-    .flags(flags)
+    .reset(reset)
 );
 always #5 clkin = ~clkin;
 initial begin

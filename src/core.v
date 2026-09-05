@@ -10,9 +10,7 @@ module core(
     input wire [7:0] gpio_core_in,
     input wire clkin, reset,
     //debug outputs
-    output wire [7:0] gpio_core_out,
-    output wire [2:0] state_out,
-    output wire [1:0] flags
+    output wire [7:0] gpio_core_out
     );
     //5 Stages of the classic risc pipeline taken as states in an fsm
     localparam FETCH = 3'd0, DECODE = 3'd1, EXECUTE = 3'd2, MEMORY = 3'd3, WRITEBACK = 3'D4, RESET = 3'd5;
@@ -36,7 +34,7 @@ module core(
     reg [2:0] state, nextstate;
     reg [1:0] data_rw, n_data_rw;
     //a nop reg, when its high the instruction is supposed to be a nop
-    reg n_nop, nop, write_enable;
+    reg write_enable;
     //wire nettypes
     wire [31:0] curr_inst, data_word_OUT;
     wire [31:0] result_alu;
@@ -45,7 +43,6 @@ module core(
     wire [4:0] rs1, rs2, rd;
     wire read_enable;
     // the outside world's window into the cpu
-    assign state_out = state;
     assign gpio_core_out = gpio_core_out_wire[7:0];
     assign rs2 = instword[24:20];
     assign rs1 = instword[19:15];
@@ -71,8 +68,7 @@ module core(
         .oper_a(alu_a),
         .oper_b(alu_b),
         .opcode(opcode),
-        .result(result_alu),
-        .flags(flags)
+        .result(result_alu)
     );
     registerfile REG_0(
         .rd_in(return_dest),
@@ -92,43 +88,17 @@ module core(
             state <= RESET;
             instword <= 32'h00000000;
             // registerfile [0] <= 32'h00000000;
-            nop  <= `FALSE;
+            // nop  <= `FALSE;
         end
         else begin
             state <= nextstate;
             program_counter <= next_program_counter;
             result <= result_alu;
-            nop <= n_nop;
+            // nop <= n_nop;
             data_rw <= n_data_rw;
             address_dat <= n_address_dat;
             data_word_IN <= n_data_word_IN;
             if(nextstate==FETCH) instword <= curr_inst;
-            //this makes it so that the registerfile is inferred as sram rather than transperant latches
-            // if(nextstate==WRITEBACK)begin
-            //     case(instword[6:0])
-            //         LUI: registerfile[instword[11:7]] <= {instword[31:12], 12'h000};
-            //         //lui path fetch -> decode ->execute->writeback
-            //         AUIPC: registerfile[instword[11:7]] <= result_alu;
-            //         JAL: registerfile[instword[11:7]] <= result_alu;
-            //         JALR: registerfile[instword[11:7]] <= result_alu;
-            //         LOAD: begin
-            //             case(instword[14:12])
-            //             3'h0: registerfile[instword[11:7]] <= {{24{data_word_OUT[7]}}, data_word_OUT[7:0]};
-            //             3'h1: registerfile[instword[11:7]] <= {{16{data_word_OUT[15]}}, data_word_OUT[15:0]};
-            //             3'h2: registerfile[instword[11:7]] <= data_word_OUT;
-            //             3'h4: registerfile[instword[11:7]] <= {24'h000000, data_word_OUT[7:0]};
-            //             3'h5: registerfile[instword[11:7]] <= {16'h0000, data_word_OUT[15:0]};
-            //             endcase
-            //         end
-            //         ARM_IMM: registerfile[instword[11:7]] <= result_alu;
-            //         ARM_RR: registerfile[instword[11:7]] <= result_alu;
-            //     endcase
-            //     //registerfile cleanup
-            //     registerfile[0] <= 32'h0000_0000;
-            // end
-            //check the pc and pc latched logic
-            // pc_latched <= program_counter;
-            //simple thing done here, the result for memory must only be the memory address
         end
     end
     always@(*)begin
@@ -141,7 +111,6 @@ module core(
         return_dest = 32'h00000000;
         opcode = ADD;
         nextstate = state;
-        n_nop = nop;
         n_data_rw = data_rw;
         next_program_counter = program_counter;
         n_address_dat = address_dat;
@@ -150,18 +119,13 @@ module core(
         if(!reset)begin
             nextstate = FETCH;
             next_program_counter = 0;
-            n_nop = `FALSE;
             n_data_rw = 2'b00;
         end
         else begin
             case(state)
             RESET: nextstate = FETCH;
             FETCH:begin 
-                //fetch's alu use is to calculate whether the instruction is a nop or not
                 nextstate = DECODE;
-                alu_a = instword;
-                alu_b = 32'h00000000;
-                opcode = EQL;
                 end
             DECODE:begin
                 //result at decode is either 0 or a 1 when true n_nop goes high
@@ -170,8 +134,6 @@ module core(
                 B = 4;
                 OPC = ADD;
                 nextstate = EXECUTE;
-                n_nop = `FALSE;
-                if(result[0]) n_nop = `TRUE;
                 //default nextstae is execute 
                 case(instword[6:0])
                 JAL: begin
@@ -226,7 +188,7 @@ module core(
                 end
                 //fence and fence.tso instructions will be decoded but they do 
                 //absolutely nothing so treating as nop
-                FEN: n_nop = `TRUE;
+                FEN:;
                 //ecall reserved address = 0x1000
                 EC: begin
                     n_data_rw = 2'b01; //memory in write
@@ -352,18 +314,11 @@ module core(
                 //program counter next updated here
                 //if the nop flag is high, then program counter is updated and the fsm is sent to fetch
                 //nop takes direct control of the alu in order to land on the new state
-                if(nop)begin
-                    n_nop = `TRUE;
-                    next_program_counter = result;
-                    nextstate = WRITEBACK;
-                end
-                else begin
-                    //the alu is passed the newly computed values of the registers A, B and OPC
-                    alu_a = A;
-                    alu_b = B;
-                    opcode = OPC;
-                    //updating the nextprogramcounter
-                end
+                //the alu is passed the newly computed values of the registers A, B and OPC
+                alu_a = A;
+                alu_b = B;
+                opcode = OPC;
+                //updating the nextprogramcounter
                 //the calculation done in the execute cycle will most likely be for the program counter   
             end
             MEMORY:begin
