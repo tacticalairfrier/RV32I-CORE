@@ -142,6 +142,7 @@ module core(
                     B = program_counter;
                     OPC = ADD;
                 end
+                //jalr logic needs a change jalr does pc+4 now and the pc+rs1 in exec
                 JALR: begin
                     A = rs1_latch;
                     B = {{20{instword[31]}}, instword[31:20]};
