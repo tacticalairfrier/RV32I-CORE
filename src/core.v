@@ -30,7 +30,7 @@ module core(
     reg [31:0] instword;
     reg [31:0] alu_a, alu_b;
     reg [31:0] return_dest;
-    reg [3:0] opcode, OPC;
+    reg [3:0] opcode;
     reg [2:0] state, nextstate;
     reg [1:0] data_rw, n_data_rw;
     //a nop reg, when its high the instruction is supposed to be a nop
@@ -42,6 +42,10 @@ module core(
     wire [31:0] rs1_latch, rs2_latch;
     wire [4:0] rs1, rs2, rd;
     wire read_enable;
+    //
+    wire [31:0] offset, loadset, branchdest;
+    wire [3:0] ALUopc;
+    //
     // the outside world's window into the cpu
     assign gpio_core_out = gpio_core_out_wire[7:0];
     assign rs2 = instword[24:20];
@@ -67,7 +71,7 @@ module core(
     alu ALU_0 (
         .oper_a(alu_a),
         .oper_b(alu_b),
-        .opcode(opcode),
+        .opcode(ALUopc),
         .result(result_alu)
     );
     registerfile REG_0(
@@ -80,6 +84,16 @@ module core(
         .read_enable(read_enable),
         .rs1_mod(rs1_latch),
         .rs2_mod(rs2_latch)
+    );
+    controller C_0(
+        .loadset(loadset),
+        .offset(offset),
+        .ALUopc(ALUopc),
+        .rs2_src(rs2_latch),
+        .instword(instword),
+        .state(state),
+        .lastresult(result[0]),
+        .branchdest(branchdest)
     );
     //fsm
     always@(posedge clkin)begin
@@ -105,11 +119,9 @@ module core(
         //preventing latch inferrence
         A = 32'h0;
         B = 32'h0;
-        OPC = ADD;
         alu_a = 32'h00000000;
         alu_b = 32'h00000000;
         return_dest = 32'h00000000;
-        opcode = ADD;
         nextstate = state;
         n_data_rw = data_rw;
         next_program_counter = program_counter;
@@ -124,48 +136,28 @@ module core(
         else begin
             case(state)
             RESET: nextstate = FETCH;
-            FETCH:begin 
-                nextstate = DECODE;
-                end
+            FETCH: nextstate = DECODE;
             DECODE:begin
                 //result at decode is either 0 or a 1 when true n_nop goes high
                 //decoder puts the feilds into correct thing
                 A = program_counter;
                 B = 4;
-                OPC = ADD;
                 nextstate = EXECUTE;
                 //default nextstae is execute 
                 case(instword[6:0])
                 JAL: begin
-                    // A = {{11{instword[31]}}, instword[31], instword[30], instword[30:21], instword[20], instword[19:12], `FALSE};
-                    A = {{11{instword[31]}}, instword[31], instword[19:12], instword[20], instword[30:21], `FALSE};
-                    B = program_counter;
-                    OPC = ADD;
+                    A = program_counter;
+                    B = offset;
                 end
                 //jalr logic needs a change jalr does pc+4 now and the pc+rs1 in exec
-                JALR: begin
+                JALR: begin //
                     A = rs1_latch;
-                    B = {{20{instword[31]}}, instword[31:20]};
-                    OPC = ADD;
+                    B = offset;
                 end
                 BRANCH: begin
                     // a and b are rs1 and rs2 rspectively using r-type instruction format
                     A = rs1_latch;
                     B = rs2_latch;
-                    case(instword[14:12])
-                    //beq -> take the branch if equal to 
-                    3'h0: OPC = EQL;
-                    //bne -> take the branch if not equal
-                    3'h1: OPC = EQL;
-                    //blt -> take the branch if rs1 is less than rs2 in a signed comparison
-                    3'h4: OPC = SLT;
-                    //bge -> take the branch if rs1 is greater than rs2 using a signed comparison
-                    3'h5: OPC = SLT;
-                    //bltu -> take the branch is rs1 is less than rs2 using unsigned comparison
-                    3'h6: OPC = SLTU;
-                    //bgeu -> take the branch if rs1 is greater than rs2 using an unsigned comparison
-                    3'h7: OPC = SLTU;
-                    endcase
                 end
                 //only load and store are allowed to take the fsm into memory
                 LOAD: begin
@@ -173,9 +165,8 @@ module core(
                     n_data_rw = 2'b10;
                     //A is the rs1 and b is the immediate instruction field using i-type field
                     A = rs1_latch;
-                    B = {{20{instword[31]}}, instword[31:20]}; //sign-extended
+                    B = offset; //sign-extended
                     //not taking f3 field here as its always going to be an add instruction
-                    OPC =  ADD;
                     nextstate = EXECUTE;
                     //THE logic for fetching from memory comes in the decode phase
                 end
@@ -183,8 +174,7 @@ module core(
                     n_data_rw = 2'b01; ///latch
                     //decode for the s-type instruction
                     A = rs1_latch;
-                    B = {{20{instword[31]}} ,instword[31:25], instword[11:7]};
-                    OPC = ADD;
+                    B = offset;
                     nextstate = EXECUTE;
                 end
                 //fence and fence.tso instructions will be decoded but they do 
@@ -199,13 +189,11 @@ module core(
                 //first use of alu done right after the decode state
                 alu_a = A;
                 alu_b = B;
-                opcode = OPC;
             end
             EXECUTE:begin
                 //program counter increment by default
                 A = program_counter;
                 B = 4;
-                OPC = ADD;
                 nextstate = WRITEBACK;
                 //first part of execute will be that this guy takes the A,B AND OPC and feeds it into the alu
                 //states can be skipped
@@ -221,22 +209,8 @@ module core(
                     JAL: next_program_counter = result;
                     JALR: next_program_counter = {result[31:1], `FALSE};
                     BRANCH:begin
-                        if(instword[14:12] == 3'h0 || instword[14:12] == 3'h4 || instword[14:12] == 3'h6)begin
-                            //for all true conditions -> beq, blt, bltu
-                            if(result[0]) begin
-                                A = program_counter;
-                                //b is the offset to be added to the programcounter
-                                B = {{19{instword[31]}} ,instword[31], instword[7], instword[30:25], instword[11:8], `FALSE};
-                            end
-                        end
-                        else begin
-                            //for all false conditions -> bne, bge, bgeu
-                            if(!result[0]) begin
-                                A = program_counter;
-                                //b is the offset to be added to the programcounter
-                                B = {{19{instword[31]}} ,instword[31], instword[7], instword[30:25], instword[11:8], `FALSE};
-                            end
-                        end
+                        A = program_counter;
+                        B = branchdest;
                         nextstate = MEMORY;
                     end
                     LOAD:begin
@@ -247,54 +221,19 @@ module core(
                     STORE:begin
                         //case statement
                         n_address_dat = result; /// latch needed, 
-                        case(instword[14:12])
-                        3'h0:n_data_word_IN = {24'h000000, rs2_latch[7:0]}; //latch needed
-                        3'h1:n_data_word_IN = {16'h0000, rs2_latch[15:0]};
-                        3'h2:n_data_word_IN = rs2_latch;
-                        endcase
+                        n_data_word_IN = loadset;
                         nextstate = MEMORY;
                     end
                     ARM_IMM:begin
                         next_program_counter = result;
                         A = rs1_latch;
-                        B = {{20{instword[31]}}, instword[31:20]};
-                        case(instword[14:12])
-                            ///case block is just useful for setting the opcode
-                            3'h0: OPC = ADD;
-                            3'h1: OPC = SLL;
-                            3'h2: OPC = SLT;
-                            3'h3: OPC = SLTU;
-                            3'h4: OPC = XOR;
-                            3'h5: begin
-                                //F7 decoding into opcode
-                                if(instword[31:25] == 7'h00) OPC = SRR;
-                                else if(instword[31:25] == 7'h20) OPC = SRA;
-                            end
-                            3'h6: OPC = OR;
-                            3'h7: OPC = AND;
-                        endcase
+                        B = offset;
                         nextstate = WRITEBACK;
                     end
                     ARM_RR: begin
                         next_program_counter = result;
                         A = rs1_latch;
                         B = rs2_latch;
-                        case(instword[14:12])
-                            3'h0:begin
-                                if(instword[31:25] == 7'h00) OPC = ADD;
-                                else if(instword[31:25] == 7'h20) OPC = SUB;
-                            end
-                            3'h1: OPC = SLL;
-                            3'h2: OPC = SLT;
-                            3'h3: OPC = SLTU;
-                            3'h4: OPC = XOR;
-                            3'h5: begin
-                                if(instword[31:25] == 7'h00) OPC = SRR;
-                                else if(instword[31:25] == 7'h20) OPC = SRA;
-                            end
-                            3'h6: OPC = OR;
-                            3'h7: OPC = AND;
-                        endcase
                         nextstate = WRITEBACK;
                     end
                     FEN: nextstate = WRITEBACK;
@@ -318,7 +257,6 @@ module core(
                 //the alu is passed the newly computed values of the registers A, B and OPC
                 alu_a = A;
                 alu_b = B;
-                opcode = OPC;
                 //updating the nextprogramcounter
                 //the calculation done in the execute cycle will most likely be for the program counter   
             end
@@ -334,7 +272,7 @@ module core(
                 nextstate = FETCH;
                 write_enable = `TRUE;
                 case(instword[6:0])
-                    LUI: return_dest = {instword[31:12], 12'h000};
+                    LUI: return_dest = offset;
                     AUIPC: return_dest = result;
                     JAL: return_dest = result;
                     JALR: return_dest = result;
