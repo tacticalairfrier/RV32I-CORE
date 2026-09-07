@@ -45,6 +45,7 @@ module core(
     //
     wire [31:0] offset, loadset, branchdest;
     wire [3:0] ALUopc;
+    wire [1:0] Memop;
     //
     // the outside world's window into the cpu
     assign gpio_core_out = gpio_core_out_wire[7:0];
@@ -93,7 +94,8 @@ module core(
         .instword(instword),
         .state(state),
         .lastresult(result[0]),
-        .branchdest(branchdest)
+        .branchdest(branchdest),
+        .dataRW(Memop)
     );
     //fsm
     always@(posedge clkin)begin
@@ -143,6 +145,7 @@ module core(
                 A = program_counter;
                 B = 4;
                 nextstate = EXECUTE;
+                n_data_rw = Memop;
                 //default nextstae is execute 
                 case(instword[6:0])
                 JAL: begin
@@ -162,27 +165,25 @@ module core(
                 //only load and store are allowed to take the fsm into memory
                 LOAD: begin
                     //data rw is true because ur loading data inside
-                    n_data_rw = 2'b10;
+                    // n_data_rw = 2'b10;
                     //A is the rs1 and b is the immediate instruction field using i-type field
                     A = rs1_latch;
                     B = offset; //sign-extended
                     //not taking f3 field here as its always going to be an add instruction
-                    nextstate = EXECUTE;
                     //THE logic for fetching from memory comes in the decode phase
                 end
                 STORE: begin
-                    n_data_rw = 2'b01; ///latch
+                    // n_data_rw = 2'b01; ///latch
                     //decode for the s-type instruction
                     A = rs1_latch;
                     B = offset;
-                    nextstate = EXECUTE;
                 end
                 //fence and fence.tso instructions will be decoded but they do 
                 //absolutely nothing so treating as nop
                 FEN:;
                 //ecall reserved address = 0x1000
                 EC: begin
-                    n_data_rw = 2'b01; //memory in write
+                    // n_data_rw = 2'b01; //memory in write
                 end
                 endcase
                 //raises the nop flag when all are zero

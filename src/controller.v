@@ -5,6 +5,7 @@
 module controller(
     output wire [31:0] offset, loadset, branchdest,
     output wire [3:0] ALUopc,
+    output wire [1:0] dataRW,
     input wire [31:0] rs2_src,
     input wire [31:0] instword,
     input wire [2:0] state,
@@ -42,6 +43,8 @@ module controller(
     assign INSopc[4] = ((opcode == LUI)||(opcode == AUIPC)); //u
     assign INSopc[5] = (opcode == JAL); //j
     //arithmetic instruction decode
+    assign dataRW[0] = (opcode == STORE)|(opcode == EC);
+    assign dataRW[1] = (opcode == LOAD);
     wire [1:0] arithcode;
     assign arithcode[0] = INSopc[0]; //rr
     assign arithcode[1] = (opcode == ARM_IMM); //imm
