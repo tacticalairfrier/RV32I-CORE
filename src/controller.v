@@ -4,6 +4,7 @@
 //controller module
 module controller(
     output wire [31:0] offset, loadset, branchdest,
+    output wire [10:0] INSopc,
     output wire [3:0] ALUopc,
     output wire [1:0] dataRW,
     input wire [31:0] rs2_src,
@@ -35,27 +36,38 @@ module controller(
     assign zerologic[6] = (funct3 == 3'b110);
     assign zerologic[7] = (funct3 == 3'b111);
     //instruction type decoded -> r,i,s,b,u,j ->
-    wire [5:0] INSopc;
-    assign INSopc[0] = (opcode == ARM_RR); //r
-    assign INSopc[1] = ((opcode == LOAD)||(opcode == ARM_IMM)||(opcode == JALR)); //i
-    assign INSopc[2] = (opcode == STORE); //s
-    assign INSopc[3] = (opcode == BRANCH); //b
-    assign INSopc[4] = ((opcode == LUI)||(opcode == AUIPC)); //u
-    assign INSopc[5] = (opcode == JAL); //j
+    // wire [5:0] INSopc;
+    // assign INSopc[0] = (opcode == ARM_RR); //r
+    // assign INSopc[1] = ((opcode == LOAD)||(opcode == ARM_IMM)||(opcode == JALR)); //i
+    // assign INSopc[2] = (opcode == STORE); //s
+    // assign INSopc[3] = (opcode == BRANCH); //b
+    // assign INSopc[4] = ((opcode == LUI)||(opcode == AUIPC)); //u
+    // assign INSopc[5] = (opcode == JAL); //j
+    assign INSopc[0] = (opcode == LUI); //u
+    assign INSopc[1] = (opcode == AUIPC); //u
+    assign INSopc[2] = (opcode == JAL); //j
+    assign INSopc[3] = (opcode == JALR); //i
+    assign INSopc[4] = (opcode == BRANCH); //b
+    assign INSopc[5] = (opcode == LOAD); //i
+    assign INSopc[6] = (opcode == STORE); //s
+    assign INSopc[7] = (opcode == ARM_IMM); //i
+    assign INSopc[8] = (opcode == ARM_RR); //r
+    assign INSopc[9] = (opcode == FEN); //
+    assign INSopc[10] = (opcode == EC); // 
     //arithmetic instruction decode
-    assign dataRW[0] = (opcode == STORE)|(opcode == EC);
-    assign dataRW[1] = (opcode == LOAD);
+    assign dataRW[0] = INSopc[6]|INSopc[10];
+    assign dataRW[1] = INSopc[5];
     wire [1:0] arithcode;
-    assign arithcode[0] = INSopc[0]; //rr
-    assign arithcode[1] = (opcode == ARM_IMM); //imm
+    assign arithcode[0] = INSopc[8]; //rr
+    assign arithcode[1] = INSopc[7]; //imm
     wire arithmetic = |arithcode;
     //FENCE AND ECALL HANDLED SEPARATELY
     //immediate variables
-    wire [31:0] Rtypesrc  = rs2_src&{32{INSopc[0]}};
-    wire [31:0] Utypeoffset = {instword[31:12], 12'h000}&{32{INSopc[4]}};
-    wire [31:0] jaloffset = {{11{instword[31]}}, instword[31], instword[19:12], instword[20], instword[30:21], `FALSE}&{32{INSopc[5]}};
-    wire [31:0] immoffset = {{20{instword[31]}}, instword[31:20]}&{32{INSopc[1]}};
-    wire [31:0] storeoffset = {{20{instword[31]}} ,instword[31:25], instword[11:7]}&{32{INSopc[2]}};
+    wire [31:0] Rtypesrc  = rs2_src&{32{INSopc[8]}};
+    wire [31:0] Utypeoffset = {instword[31:12], 12'h000}&{32{INSopc[0]|INSopc[1]}};
+    wire [31:0] jaloffset = {{11{instword[31]}}, instword[31], instword[19:12], instword[20], instword[30:21], `FALSE}&{32{INSopc[2]}};
+    wire [31:0] immoffset = {{20{instword[31]}}, instword[31:20]}&{32{INSopc[3]|INSopc[5]|INSopc[7]}};
+    wire [31:0] storeoffset = {{20{instword[31]}} ,instword[31:25], instword[11:7]}&{32{INSopc[6]}};
     assign offset = Rtypesrc|Utypeoffset|jaloffset|immoffset|storeoffset;
     //branch logic 
     wire [31:0] branchoffset = {{19{instword[31]}} ,instword[31], instword[7], instword[30:25], instword[11:8], `FALSE};  //&{32{INSopc[3]}};
@@ -93,7 +105,7 @@ module controller(
     therefore only jal, jalr, branch, load and store 
     dont update nextprogramcounter at execute*/
     wire [3:0] BranchOpc = brancheql|branchslt|branchsltu;
-    wire [3:0] DecodeOpc = ((INSopc[3])?(BranchOpc):(ADD))&{4{dec}};
+    wire [3:0] DecodeOpc = ((INSopc[4])?(BranchOpc):(ADD))&{4{dec}};
     wire [3:0] ExecuteOpc = ((arithmetic)?(ARMopc):(ADD))&{4{exc}};
     wire dontcare = (~(dec|exc));
     wire [3:0] normal = {4{dontcare}}&ADD;

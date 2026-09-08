@@ -45,6 +45,7 @@ module core(
     wire read_enable;
     //
     wire [31:0] offset, loadset, branchdest;
+    wire [10:0] INSopc;
     wire [3:0] ALUopc;
     wire [1:0] Memop;
     //
@@ -55,7 +56,26 @@ module core(
     assign rd = instword[11:7];
     // assign read_enable = (state == FETCH||state == DECODE);
     // assign write_enable = (state == WRITEBACK||state == FETCH);
-    assign read_enable = (state == FETCH);
+    assign read_enable = state[0];
+    //mux logic flattening
+    wire [31:0] decodeA, decodeB, bsrc; //wire stage for decode
+    wire [31:0] execA, execB, naddrdat;
+    wire updatepcexe = INSopc[0]|INSopc[1]|INSopc[2]|INSopc[7]|INSopc[8]|INSopc[10];
+    // wire [31:0] auipcjalr = (INSopc[1])?({instword[31:12], 12'h000}):({result[31:1], `FALSE});
+    wire [31:0] inpcval = (INSopc[3])?({result[31:1], `FALSE}):(program_counter);
+    wire [31:0] fnpcval = (updatepcexe)?(result):(inpcval);
+    assign decodeA = (INSopc[3]|INSopc[4]|INSopc[5]|INSopc[6])?(rs1_latch):(program_counter);
+    assign bsrc = (INSopc[2]|INSopc[3]|INSopc[5]|INSopc[6])?(offset):(32'd4);
+    assign decodeB = (INSopc[4])?(rs2_latch):(bsrc);
+    wire [5:0] nsexec = (INSopc[4]|INSopc[5]|INSopc[6]|INSopc[10])?(MEMORY):(WRITEBACK);
+    assign execA = (INSopc[7]|INSopc[8])?(rs1_latch):(program_counter);
+    wire [31:0] selbd = (INSopc[4])?(branchdest):(32'd4);
+    wire [31:0] rs2bd = (INSopc[8])?(rs2_latch):(selbd);
+    wire [31:0] offsetrs2 = (INSopc[7])?(offset):(rs2bd);
+    assign execB = (INSopc[1])?({instword[31:12], 12'h000}):(offsetrs2);
+    wire [31:0] oldec = (INSopc[10])?(12'hffc):(address_dat);
+    assign naddrdat = (INSopc[5]|INSopc[6])?(result):(oldec);
+
     //to be removed 
     //initialising the modules 
     memory MEM_0 (
@@ -96,7 +116,8 @@ module core(
         .state(state),
         .lastresult(result[0]),
         .branchdest(branchdest),
-        .dataRW(Memop)
+        .dataRW(Memop),
+        .INSopc(INSopc)
     );
     //fsm
     always@(posedge clkin)begin
@@ -143,120 +164,41 @@ module core(
             DECODE:begin
                 //result at decode is either 0 or a 1 when true n_nop goes high
                 //decoder puts the feilds into correct thing
-                A = program_counter;
-                B = 4;
                 nextstate = EXECUTE;
                 n_data_rw = Memop;
-                //default nextstae is execute 
-                case(instword[6:0])
-                JAL: begin
-                    A = program_counter;
-                    B = offset;
-                end
-                //jalr logic needs a change jalr does pc+4 now and the pc+rs1 in exec
-                JALR: begin //
-                    A = rs1_latch;
-                    B = offset;
-                end
-                BRANCH: begin
-                    // a and b are rs1 and rs2 rspectively using r-type instruction format
-                    A = rs1_latch;
-                    B = rs2_latch;
-                end
-                //only load and store are allowed to take the fsm into memory
-                LOAD: begin
-                    //data rw is true because ur loading data inside
-                    // n_data_rw = 2'b10;
-                    //A is the rs1 and b is the immediate instruction field using i-type field
-                    A = rs1_latch;
-                    B = offset; //sign-extended
-                    //not taking f3 field here as its always going to be an add instruction
-                    //THE logic for fetching from memory comes in the decode phase
-                end
-                STORE: begin
-                    // n_data_rw = 2'b01; ///latch
-                    //decode for the s-type instruction
-                    A = rs1_latch;
-                    B = offset;
-                end
-                //fence and fence.tso instructions will be decoded but they do 
-                //absolutely nothing so treating as nop
-                FEN:;
-                //ecall reserved address = 0x1000
-                EC:;
-                endcase
-                //raises the nop flag when all are zero
-                //first use of alu done right after the decode state
-                alu_a = A;
-                alu_b = B;
+                alu_a = decodeA;
+                alu_b = decodeB;
             end
             EXECUTE:begin
                 //program counter increment by default
-                A = program_counter;
-                B = 4;
-                nextstate = WRITEBACK;
+                next_program_counter = fnpcval;
+                nextstate = nsexec;
+                alu_a = execA;
+                alu_b = execB;
+                n_address_dat = naddrdat;
                 //first part of execute will be that this guy takes the A,B AND OPC and feeds it into the alu
                 //states can be skipped
                 //the important constraint of the multicycle approach is to use the alu exactly once per state
                 //as long as a b and opcode are kept the same, the result will be same
-                case(instword[6:0])
-                    LUI: next_program_counter = result;
-                    AUIPC: begin
-                        next_program_counter = result;
-                        A = {instword[31:12], 12'h000};
-                        B = program_counter;
-                    end
-                    JAL: next_program_counter = result;
-                    JALR: next_program_counter = {result[31:1], `FALSE};
-                    BRANCH:begin
-                        A = program_counter;
-                        B = branchdest;
-                        nextstate = MEMORY;
-                    end
-                    LOAD:begin
-                        // next_program_counter = result;
-                        nextstate = MEMORY;
-                        n_address_dat = result;
-                    end 
-                    STORE:begin
-                        //case statement
-                        n_address_dat = result; /// latch needed, 
-                        n_data_word_IN = loadset;
-                        nextstate = MEMORY;
-                    end
-                    ARM_IMM:begin
-                        next_program_counter = result;
-                        A = rs1_latch;
-                        B = offset;
-                        nextstate = WRITEBACK;
-                    end
-                    ARM_RR: begin
-                        next_program_counter = result;
-                        A = rs1_latch;
-                        B = rs2_latch;
-                        nextstate = WRITEBACK;
-                    end
-                    FEN: nextstate = WRITEBACK;
-                        //treating fence as an nop here
-                    EC:begin
-                        next_program_counter = result;
-                        nextstate = MEMORY;
-                        if(instword[31:25] == 7'h01) n_data_word_IN = 2; //ebreak
-                        else n_data_word_IN = 1; // ecall 
-                        n_address_dat = 12'hffc;
-                    end 
+                    // LOAD:begin
+                    //     // next_program_counter = result;
+                    //     n_address_dat = naddrdat;
+                    // end 
+                if(INSopc[6]) n_data_word_IN = loadset;
+                 if(INSopc[10])begin
+                    if(instword[31:25] == 7'h01) n_data_word_IN = 2; //ebreak
+                    else n_data_word_IN = 1; // ecall 
+                        // n_address_dat = 12'hffc;
+                end 
                     //calling ecall as an nop here 
                     //will need to add some functionality
                     //second use of the alu
-                endcase
                 //Initial part of decode is done 
                 //some operations need the alu more than once i.e first for shifting to the left and then calculating the rd 
                 //program counter next updated here
                 //if the nop flag is high, then program counter is updated and the fsm is sent to fetch
                 //nop takes direct control of the alu in order to land on the new state
                 //the alu is passed the newly computed values of the registers A, B and OPC
-                alu_a = A;
-                alu_b = B;
                 //updating the nextprogramcounter
                 //the calculation done in the execute cycle will most likely be for the program counter   
             end
@@ -271,7 +213,7 @@ module core(
             WRITEBACK:begin
                 nextstate = FETCH;
                 write_enable = `TRUE;
-                case(instword[6:0])
+                case(instword[6:0]) //writeback needs to be heavily optimised
                     LUI: return_dest = offset;
                     AUIPC: return_dest = result;
                     JAL: return_dest = result;
