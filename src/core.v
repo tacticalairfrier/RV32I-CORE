@@ -13,7 +13,8 @@ module core(
     output wire [7:0] gpio_core_out
     );
     //5 Stages of the classic risc pipeline taken as states in an fsm
-    localparam FETCH = 3'd0, DECODE = 3'd1, EXECUTE = 3'd2, MEMORY = 3'd3, WRITEBACK = 3'D4, RESET = 3'd5;
+    // localparam FETCH = 3'd0, DECODE = 3'd1, EXECUTE = 3'd2, MEMORY = 3'd3, WRITEBACK = 3'D4, RESET = 3'd5;
+    localparam FETCH = 6'b000001, DECODE = 6'b000010, EXECUTE = 6'b000100, MEMORY = 6'b001000, WRITEBACK = 6'b010000, RESET = 6'b100000;
     ///localparam for opcodes of the alu
     localparam SLL = 4'h8, SRR = 4'h9, SRA = 4'ha, EQL = 4'hb, SLT = 4'hc, SLTU = 4'hd, ADD = 4'h7, SUB = 4'h6, AND = 4'h5, OR = 4'h4, XOR = 4'h3;
     //localparams for the riscv standard opcodes
@@ -31,7 +32,7 @@ module core(
     reg [31:0] alu_a, alu_b;
     reg [31:0] return_dest;
     reg [3:0] opcode;
-    reg [2:0] state, nextstate;
+    reg [5:0] state, nextstate;
     reg [1:0] data_rw, n_data_rw;
     //a nop reg, when its high the instruction is supposed to be a nop
     reg write_enable;
@@ -182,9 +183,7 @@ module core(
                 //absolutely nothing so treating as nop
                 FEN:;
                 //ecall reserved address = 0x1000
-                EC: begin
-                    // n_data_rw = 2'b01; //memory in write
-                end
+                EC:;
                 endcase
                 //raises the nop flag when all are zero
                 //first use of alu done right after the decode state

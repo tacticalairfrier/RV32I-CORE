@@ -8,12 +8,12 @@ module controller(
     output wire [1:0] dataRW,
     input wire [31:0] rs2_src,
     input wire [31:0] instword,
-    input wire [2:0] state,
+    input wire [5:0] state,
     input wire lastresult
 );
     //controller module intentionally stays purely combinational
     //copying over the localparams from the core.v module
-    localparam DECODE = 3'd1, EXECUTE = 3'd2;
+    // localparam DECODE = 3'd1, EXECUTE = 3'd2;
     localparam SLL = 4'h8, SRR = 4'h9, SRA = 4'ha, EQL = 4'hb, SLT = 4'hc, SLTU = 4'hd, ADD = 4'h7, SUB = 4'h6, AND = 4'h5, OR = 4'h4, XOR = 4'h3;
     localparam LUI = 7'h37, AUIPC = 7'h17, JAL = 7'h6f, JALR = 7'h67, BRANCH = 7'h63, LOAD = 7'h03, STORE = 7'h23, ARM_IMM = 7'h13, ARM_RR = 7'h33, FEN = 7'h0f, EC = 7'h73;
     /*  the main aim for this controller logic is to reduce the bloat caused by the massive case
@@ -22,8 +22,8 @@ module controller(
     wire [6:0] funct7 = instword[31:25];
     wire [6:0] opcode = instword[6:0];
     wire [2:0] funct3 = instword[14:12];
-    wire dec = (state == DECODE);
-    wire exc = (state == EXECUTE);
+    wire dec = state[1];
+    wire exc = state[2];
     //zerologic
     wire [7:0] zerologic;
     assign zerologic[0] = (funct3 == 3'b000);
