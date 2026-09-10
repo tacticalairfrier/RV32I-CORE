@@ -45,6 +45,8 @@ src/
   core.v      — FSM core
   alu.v       — ALU
   memory.v    — instruction/data memory (32-bit word-wide, BRAM-synthesizable)
+  registerfile.v - totally sychronous mirrored register modules
+  controller.v  - a decode stage for the core.v 
 test/
   test_core_basic.v — basic FSM/instruction-stream testbench (waveform dump, no assertions)
   alu_test.v         — ALU-only testbench
@@ -137,19 +139,32 @@ specifically to get clean BRAM inference on both of these targets.
 
 ### Bring-up findings (preliminary)
 
-- **Basys3 (XC7A35T-1CPG236C):** 772 LUT6s. BRAM successfully inferred for
-  both imem and dmem.
-- **iCE40UP5K:** 1479 ICESTORM_LCs. BRAM inferred for both imem and dmem
-  as well. The register file (sync-write, async-read) is a no-op for
-  Vivado, which maps it to cheap LUTRAM/distributed RAM without complaint.
-  yosys/nextpnr targeting iCE40 does not infer LUTRAM as readily for that
-  async-read pattern, so the async-read register file was instead getting
-  expanded into a wide mux tree plus discrete FFs, driving LUT usage up
-  significantly. Reworked the register file to map into BRAM on iCE40
+- **Basys3 (XC7A35T-1CPG236C):** 780 LUT6s (up slightly from 772). BRAM
+  successfully inferred for both imem and dmem. The small increase here
+  is expected — Vivado was already aggressively optimizing the old nested
+  case statements, so the explicit one-hot decoder gives it less to
+  collapse. Not a regression, just a smaller margin for AMD's synthesis
+  to work with.
+- **iCE40UP5K:** 1385 ICESTORM_LCs (down from 1479). BRAM inferred for both
+  imem and dmem as well. The register file (sync-write, async-read) is a
+  no-op for Vivado, which maps it to cheap LUTRAM/distributed RAM without
+  complaint. yosys/nextpnr targeting iCE40 does not infer LUTRAM as readily
+  for that async-read pattern, so the async-read register file was instead
+  getting expanded into a wide mux tree plus discrete FFs, driving LUT usage
+  up significantly. Reworked the register file to map into BRAM on iCE40
   instead, bringing usage down to the figures above. Timing closes at
   20 MHz on iCE40 with this change.
+- Decode logic reworked from nested case statements to a combinational
+  decoder built on one-hot instruction and funct3 encoding, driven by a
+  one-hot FSM, with continuous assignments replacing procedural logic
+  where applicable. No nested case statements remain anywhere in the
+  design. Yosys/nextpnr (iCE40) sees the larger benefit from this since
+  it doesn't optimize nested case chains as aggressively as Vivado does.
 - Wrote a small LED-blink program in assembly and tested it on both boards
   (`assembly/blink.asm`).
+
+**Next up:** the nested ternary operations are the last unoptimized piece
+left in the design — planning to remove those next.
 
 Resource utilization, timing closure, and full BRAM inference reports will
 be added here as bring-up progresses.
