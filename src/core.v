@@ -13,6 +13,7 @@ module core(
     output wire [7:0] gpio_core_out
     );
     //5 Stages of the classic risc pipeline taken as states in an fsm
+    //uses one hot fsm encoding instead of binary fsm encoding
     // localparam FETCH = 3'd0, DECODE = 3'd1, EXECUTE = 3'd2, MEMORY = 3'd3, WRITEBACK = 3'D4, RESET = 3'd5;
     localparam FETCH = 6'b000001, DECODE = 6'b000010, EXECUTE = 6'b000100, MEMORY = 6'b001000, WRITEBACK = 6'b010000, RESET = 6'b100000;
     ///localparam for opcodes of the alu
@@ -24,7 +25,7 @@ module core(
     //the registerfile for the core, 32 bits wide, 31 deep 0x0 will be tied to 0
     // reg [31:0] registerfile [0:31];
     reg [31:0] program_counter, next_program_counter;
-    reg [31:0] A, B, result;
+    reg [31:0] result;
     //memory interface
     reg [31:0] address_dat, n_address_dat, data_word_IN, n_data_word_IN;
     //alu
@@ -35,16 +36,16 @@ module core(
     reg [5:0] state, nextstate;
     reg [1:0] data_rw, n_data_rw;
     //a nop reg, when its high the instruction is supposed to be a nop
-    reg write_enable;
+    // reg write_enable;
     //wire nettypes
     wire [31:0] curr_inst, data_word_OUT;
     wire [31:0] result_alu;
     wire [31:0] gpio_core_out_wire;
     wire [31:0] rs1_latch, rs2_latch;
     wire [4:0] rs1, rs2, rd;
-    wire read_enable;
+    wire read_enable, write_enable;
     //
-    wire [31:0] offset, loadset, branchdest;
+    wire [31:0] offset, loadset, storeset, branchdest;
     wire [10:0] INSopc;
     wire [3:0] ALUopc;
     wire [1:0] Memop;
@@ -57,6 +58,7 @@ module core(
     // assign read_enable = (state == FETCH||state == DECODE);
     // assign write_enable = (state == WRITEBACK||state == FETCH);
     assign read_enable = state[0];
+    assign write_enable = state[4]&(INSopc[1]|INSopc[2]|INSopc[3]|INSopc[7]|INSopc[8]|INSopc[5]|INSopc[0]);
     //mux logic flattening
     wire [31:0] decodeA, decodeB, bsrc; //wire stage for decode
     wire [31:0] execA, execB, naddrdat;
@@ -75,7 +77,11 @@ module core(
     assign execB = (INSopc[1])?({instword[31:12], 12'h000}):(offsetrs2);
     wire [31:0] oldec = (INSopc[10])?(12'hffc):(address_dat);
     assign naddrdat = (INSopc[5]|INSopc[6])?(result):(oldec);
-
+    //writeback stage combinational
+    wire [31:0] writebackwrite;
+    wire [31:0] reszero = (INSopc[1]|INSopc[2]|INSopc[3]|INSopc[7]|INSopc[8])?(result):(32'd0);
+    wire [31:0] stores = (INSopc[5])?(storeset):(reszero);
+    assign writebackwrite = (INSopc[0])?(offset):(stores);
     //to be removed 
     //initialising the modules 
     memory MEM_0 (
@@ -117,7 +123,9 @@ module core(
         .lastresult(result[0]),
         .branchdest(branchdest),
         .dataRW(Memop),
-        .INSopc(INSopc)
+        .INSopc(INSopc),
+        .Memread(data_word_OUT),
+        .storeset(storeset)
     );
     //fsm
     always@(posedge clkin)begin
@@ -141,8 +149,6 @@ module core(
     end
     always@(*)begin
         //preventing latch inferrence
-        A = 32'h0;
-        B = 32'h0;
         alu_a = 32'h00000000;
         alu_b = 32'h00000000;
         return_dest = 32'h00000000;
@@ -151,7 +157,7 @@ module core(
         next_program_counter = program_counter;
         n_address_dat = address_dat;
         n_data_word_IN = data_word_IN;
-        write_enable = `FALSE;
+        // write_enable = `FALSE;
         if(!reset)begin
             nextstate = FETCH;
             next_program_counter = 0;
@@ -180,15 +186,15 @@ module core(
                 //states can be skipped
                 //the important constraint of the multicycle approach is to use the alu exactly once per state
                 //as long as a b and opcode are kept the same, the result will be same
-                    // LOAD:begin
-                    //     // next_program_counter = result;
-                    //     n_address_dat = naddrdat;
-                    // end 
+                // LOAD:begin
+                //     // next_program_counter = result;
+                //     n_address_dat = naddrdat;
+                // end 
                 if(INSopc[6]) n_data_word_IN = loadset;
                  if(INSopc[10])begin
                     if(instword[31:25] == 7'h01) n_data_word_IN = 2; //ebreak
                     else n_data_word_IN = 1; // ecall 
-                        // n_address_dat = 12'hffc;
+                 // n_address_dat = 12'hffc;
                 end 
                     //calling ecall as an nop here 
                     //will need to add some functionality
@@ -212,25 +218,27 @@ module core(
             end
             WRITEBACK:begin
                 nextstate = FETCH;
-                write_enable = `TRUE;
-                case(instword[6:0]) //writeback needs to be heavily optimised
-                    LUI: return_dest = offset;
-                    AUIPC: return_dest = result;
-                    JAL: return_dest = result;
-                    JALR: return_dest = result;
-                    LOAD: begin
-                        case(instword[14:12])
-                        3'h0: return_dest = {{24{data_word_OUT[7]}}, data_word_OUT[7:0]};
-                        3'h1: return_dest = {{16{data_word_OUT[15]}}, data_word_OUT[15:0]};
-                        3'h2: return_dest = data_word_OUT;
-                        3'h4: return_dest = {24'h000000, data_word_OUT[7:0]};
-                        3'h5: return_dest = {16'h0000, data_word_OUT[15:0]};
-                        endcase
-                    end
-                    ARM_IMM: return_dest = result;
-                    ARM_RR: return_dest = result;
-                    default: write_enable = `FALSE;
-                endcase
+                return_dest = writebackwrite;
+                // write_enable = `TRUE;
+                // case(instword[6:0]) //writeback needs to be heavily optimised
+                //     LUI: return_dest = offset;
+                //     AUIPC: return_dest = result;
+                //     JAL: return_dest = result;
+                //     JALR: return_dest = result;
+                //     LOAD: begin
+                //         // case(instword[14:12])
+                //         // 3'h0: return_dest = {{24{data_word_OUT[7]}}, data_word_OUT[7:0]};
+                //         // 3'h1: return_dest = {{16{data_word_OUT[15]}}, data_word_OUT[15:0]};
+                //         // 3'h2: return_dest = data_word_OUT;
+                //         // 3'h4: return_dest = {24'h000000, data_word_OUT[7:0]};
+                //         // 3'h5: return_dest = {16'h0000, data_word_OUT[15:0]};
+                //         // endcase
+                //         return_dest = storeset;
+                //     end
+                //     ARM_IMM: return_dest = result;
+                //     ARM_RR: return_dest = result;
+                //     default: write_enable = `FALSE;
+                // endcase
             end
                 //alu use will not happen in the writeback and memory state
                 //registerfile always stays synced to the clock posedge and thus stays syncronous

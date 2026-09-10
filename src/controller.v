@@ -3,11 +3,11 @@
 `define FALSE 1'b0
 //controller module
 module controller(
-    output wire [31:0] offset, loadset, branchdest,
+    output wire [31:0] offset, loadset, branchdest, storeset,
     output wire [10:0] INSopc,
     output wire [3:0] ALUopc,
     output wire [1:0] dataRW,
-    input wire [31:0] rs2_src,
+    input wire [31:0] rs2_src, Memread,
     input wire [31:0] instword,
     input wire [5:0] state,
     input wire lastresult
@@ -120,4 +120,10 @@ module controller(
     wire [31:0] s1 = (zerologic[1])?({16'h0000, rs2_src[15:0]}):(32'd0);
     wire [31:0] s2 = (zerologic[2])?(rs2_src):(32'd0);
     assign loadset = s0|s1|s2;
+    wire [31:0] l0 = (zerologic[0])?({{24{Memread[7]}}, Memread[7:0]}):(32'd0);
+    wire [31:0] l1 = (zerologic[1])?({{16{Memread[15]}}, Memread[15:0]}):(32'd0);
+    wire [31:0] l2 = (zerologic[2])?(Memread):(32'd0);
+    wire [31:0] l3 = (zerologic[4])?({24'h000000, Memread[7:0]}):(32'd0);
+    wire [31:0] l4 = (zerologic[5])?({16'h0000, Memread[15:0]}):(32'd0);
+    assign storeset = l0|l1|l2|l3|l4;
 endmodule
