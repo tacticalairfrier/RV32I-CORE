@@ -162,14 +162,12 @@ module core(
         n_address_dat = address_dat;
         n_data_word_IN = data_word_IN;
         // write_enable = `FALSE;
-        if(!reset)begin
-            nextstate = FETCH;
-            next_program_counter = 0;
-            n_data_rw = 2'b00;
-        end
-        else begin
-            case(state)
-            RESET: nextstate = FETCH;
+        case(state)
+            RESET:begin
+                nextstate = FETCH;
+                // next_program_counter = 0;
+                n_data_rw = 2'b00;
+            end 
             FETCH: nextstate = DECODE;
             DECODE:begin
                 //result at decode is either 0 or a 1 when true n_nop goes high
@@ -249,7 +247,6 @@ module core(
                 //IN this stage only can the registerfile be written
                 //the registerfile can be read in any other states
                 //this is just for WRITING on the registerfile
-            endcase
-        end
+        endcase
         end
 endmodule
