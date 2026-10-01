@@ -1,6 +1,6 @@
 # RV32I-CORE
 
-A multicycle RV32I RISC-V CPU core written in Verilog, built from scratch as a hands-on exercise in computer architecture and RTL design — golden-model-first, with a hand-written C reference model used for differential checking against the RTL.
+A multicycle RV32I RISC-V CPU core written in Verilog, built from scratch as a hands-on exercise in computer architecture and RTL design - golden-model-first, with a hand-written C reference model used for differential checking against the RTL.
 
 > **Status: early bring-up, not verified for general use.** A subset of the instruction set has been exercised against the reference model and confirmed working. The rest of the RV32I opcode map is decoded and implemented in RTL but has not yet been run through a compliance suite or formal tool. See [Verification status](#verification-status) before relying on this core for anything beyond experimentation.
 
@@ -42,23 +42,23 @@ There is currently no single up-to-date source of truth for "what's actually ver
 
 ```
 src/
-  core.v      — FSM core
-  alu.v       — ALU
-  memory.v    — instruction/data memory (32-bit word-wide, BRAM-synthesizable)
+  core.v      - FSM core
+  alu.v       - ALU
+  memory.v    - instruction/data memory (32-bit word-wide, BRAM-synthesizable)
   registerfile.v - totally sychronous mirrored register modules
   controller.v  - a decode stage for the core.v 
 test/
   test_core_basic.v — basic FSM/instruction-stream testbench (waveform dump, no assertions)
-  alu_test.v         — ALU-only testbench
-  test_mem.v         — memory module testbench
+  alu_test.v         - ALU-only testbench
+  test_mem.v         - memory module testbench
 ref/
-  rv32i_ref.c              — golden C reference model / ISS
-  verified_instructions.txt — instructions confirmed against the reference model so far (stale, see above)
+  rv32i_ref.c              - golden C reference model / ISS
+  verified_instructions.txt - instructions confirmed against the reference model so far (stale, see above)
 memdump/
-  memory.txt      — RTL's word-wise memory dump for a run
-  memory_ref.txt  — C reference model's word-wise memory dump for the same run (diffed against memory.txt)
-  trace.txt       — C reference model's full per-cycle pc/instruction/register trace + final memory image
-firmware.hex  — test program loaded into instruction memory at sim time (32-bit word width, generated with --verilog-data-width 4)
+  memory.txt      - RTL's word-wise memory dump for a run
+  memory_ref.txt  - C reference model's word-wise memory dump for the same run (diffed against memory.txt)
+  trace.txt       - C reference model's full per-cycle pc/instruction/register trace + final memory image
+firmware.hex  - test program loaded into instruction memory at sim time (32-bit word width, generated with --verilog-data-width 4)
 ```
 
 ## Running the simulation
@@ -80,7 +80,7 @@ iverilog -o sim_mem src/memory.v test/test_mem.v
 vvp sim_mem
 ```
 
-`firmware.hex` must be present in the working directory the simulator is run from (`memory.v` loads it via a relative path) — that is the repository root folder. Make sure it was generated at 32-bit word width (`--verilog-data-width 4`); a byte-width hex file will not load correctly into the current memory model.
+`firmware.hex` must be present in the working directory the simulator is run from (`memory.v` loads it via a relative path) - that is the repository root folder. Make sure it was generated at 32-bit word width (`--verilog-data-width 4`); a byte-width hex file will not load correctly into the current memory model.
 
 ### Assembly → firmware.hex
 
@@ -121,7 +121,7 @@ This core was built golden-model-first: `ref/rv32i_ref.c` is a hand-written C re
 That's real verification, not eyeballing — but it's still bring-up-stage, not
 sign-off. The diff-and-trace comparison is currently manual: run the sim,
 generate both dumps, diff them, and consult the trace on mismatch. Coverage
-is informal too — which instructions and operand values have been exercised
+is informal too - which instructions and operand values have been exercised
 is tracked loosely through commit history, not a maintained record. The next
 steps below close both gaps: scripting the dump/diff into an automatic
 pass/fail check, and making coverage tracking explicit.
@@ -141,7 +141,7 @@ specifically to get clean BRAM inference on both of these targets.
 
 - **Basys3 (XC7A35T-1CPG236C):** 780 LUT6s (up slightly from 772). BRAM
   successfully inferred for both imem and dmem. The small increase here
-  is expected — Vivado was already aggressively optimizing the old nested
+  is expected - Vivado was already aggressively optimizing the old nested
   case statements, so the explicit one-hot decoder gives it less to
   collapse. Not a regression, just a smaller margin for AMD's synthesis
   to work with.
@@ -164,7 +164,7 @@ specifically to get clean BRAM inference on both of these targets.
   (`assembly/blink.asm`).
 
 **Next up:** the nested ternary operations are the last unoptimized piece
-left in the design — planning to remove those next.
+left in the design - planning to remove those next.
 
 Resource utilization, timing closure, and full BRAM inference reports will
 be added here as bring-up progresses.
@@ -174,22 +174,22 @@ be added here as bring-up progresses.
 FPGA-specific top module and build artifacts for the iCE40 target live in
 `ice40up50k/`:
 
-- `ice40up50k/top.v` — top-level wrapper instantiating the core, wiring
+- `ice40up50k/top.v` - top-level wrapper instantiating the core, wiring
   clock/reset and board I/O (LEDs, etc.) for the iCE40UP5K target.
-- `ice40up50k/Makefile` — drives synthesis (`yosys`), place-and-route
+- `ice40up50k/Makefile` - drives synthesis (`yosys`), place-and-route
   (`nextpnr-ice40`), and bitstream generation (`icepack`)/programming
   (`iceprog`) for this target.
-- `ice40up50k/firmware.hex` — the assembled/linked firmware image (see
+- `ice40up50k/firmware.hex` - the assembled/linked firmware image (see
   Assembly → firmware.hex above) loaded into imem/dmem via `$readmemh`
   for this target's build.
   
 ## What I've learnt
 
-1. Even a basic, minimal implementation gives real insight into computer architecture — decisions that look trivial on paper (like memory array width) have concrete synthesis consequences.
+1. Even a basic, minimal implementation gives real insight into computer architecture - decisions that look trivial on paper (like memory array width) have concrete synthesis consequences.
 2. Hands-on experience with the RISC-V ISA and its associated build/toolchain ecosystem.
 3. In-depth, practical experience with computer architecture and instruction set design.
 4. Hands-on experience with RV32I assembly.
 
 ## License
 
-MIT — see `LICENSE`.
+MIT - see `LICENSE`.
