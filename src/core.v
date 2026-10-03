@@ -16,10 +16,10 @@ module core(
     //uses one hot fsm encoding instead of binary fsm encoding
     // localparam FETCH = 3'd0, DECODE = 3'd1, EXECUTE = 3'd2, MEMORY = 3'd3, WRITEBACK = 3'D4, RESET = 3'd5;
     localparam FETCH = 6'b000001, DECODE = 6'b000010, EXECUTE = 6'b000100, MEMORY = 6'b001000, WRITEBACK = 6'b010000, RESET = 6'b100000;
-    ///localparam for opcodes of the alu
-    localparam SLL = 4'h8, SRR = 4'h9, SRA = 4'ha, EQL = 4'hb, SLT = 4'hc, SLTU = 4'hd, ADD = 4'h7, SUB = 4'h6, AND = 4'h5, OR = 4'h4, XOR = 4'h3;
-    //localparams for the riscv standard opcodes
-    localparam LUI = 7'h37, AUIPC = 7'h17, JAL = 7'h6f, JALR = 7'h67, BRANCH = 7'h63, LOAD = 7'h03, STORE = 7'h23, ARM_IMM = 7'h13, ARM_RR = 7'h33, FEN = 7'h0f, EC = 7'h73;
+    //localparam for opcodes of the alu
+    // localparam SLL = 4'h8, SRR = 4'h9, SRA = 4'ha, EQL = 4'hb, SLT = 4'hc, SLTU = 4'hd, ADD = 4'h7, SUB = 4'h6, AND = 4'h5, OR = 4'h4, XOR = 4'h3;
+    // //localparams for the riscv standard opcodes
+    // localparam LUI = 7'h37, AUIPC = 7'h17, JAL = 7'h6f, JALR = 7'h67, BRANCH = 7'h63, LOAD = 7'h03, STORE = 7'h23, ARM_IMM = 7'h13, ARM_RR = 7'h33, FEN = 7'h0f, EC = 7'h73;
     //fsm operator regs
     //alu oper_a is always rs1, and oper_b is always rs2
     //the registerfile for the core, 32 bits wide, 31 deep 0x0 will be tied to 0
@@ -30,9 +30,9 @@ module core(
     reg [31:0] address_dat, n_address_dat, data_word_IN, n_data_word_IN;
     //alu
     reg [31:0] instword;
-    reg [31:0] alu_a, alu_b;
+    // reg [31:0] alu_a, alu_b;
     reg [31:0] return_dest;
-    reg [3:0] opcode;
+    // reg [3:0] opcode;
     reg [5:0] state, nextstate;
     reg [1:0] data_rw, n_data_rw;
     //a nop reg, when its high the instruction is supposed to be a nop
@@ -82,6 +82,10 @@ module core(
     wire [31:0] reszero = (INSopc[1]|INSopc[2]|INSopc[3]|INSopc[7]|INSopc[8])?(result):(32'd0);
     wire [31:0] stores = (INSopc[5])?(storeset):(reszero);
     assign writebackwrite = (INSopc[0])?(offset):(stores);
+    wire [31:0] aluA = {32{state[1]}}&decodeA|
+                       {32{state[2]}}&execA;
+    wire [31:0] aluB = {32{state[1]}}&decodeB|
+                       {32{state[2]}}&execB;
     //to be removed 
     //initialising the modules 
     memory MEM_0 (
@@ -97,8 +101,8 @@ module core(
         .gpio_out(gpio_core_out_wire)
     );
     alu ALU_0 (
-        .oper_a(alu_a),
-        .oper_b(alu_b),
+        .oper_a(aluA),
+        .oper_b(aluB),
         .opcode(ALUopc),
         .result(result_alu)
     );
@@ -132,7 +136,7 @@ module core(
         if(!reset)begin
             program_counter <= 32'h0;
             state <= RESET;
-            instword <= 32'h00000000;
+            // instword <= 32'h00000000;
             // registerfile [0] <= 32'h00000000;
             // nop  <= `FALSE;
         end
@@ -144,13 +148,13 @@ module core(
             data_rw <= n_data_rw;
             address_dat <= n_address_dat;
             data_word_IN <= n_data_word_IN;
-            if(nextstate==FETCH) instword <= curr_inst;
+            if(nextstate[0]) instword <= curr_inst;
         end
     end
     always@(*)begin
         //preventing latch inferrence
-        alu_a = 32'h00000000;
-        alu_b = 32'h00000000;
+        // alu_a = 32'h00000000;
+        // alu_b = 32'h00000000;
         return_dest = 32'h00000000;
         nextstate = state;
         n_data_rw = data_rw;
@@ -158,29 +162,27 @@ module core(
         n_address_dat = address_dat;
         n_data_word_IN = data_word_IN;
         // write_enable = `FALSE;
-        if(!reset)begin
-            nextstate = FETCH;
-            next_program_counter = 0;
-            n_data_rw = 2'b00;
-        end
-        else begin
-            case(state)
-            RESET: nextstate = FETCH;
+        case(state)
+            RESET:begin
+                nextstate = FETCH;
+                // next_program_counter = 0;
+                n_data_rw = 2'b00;
+            end 
             FETCH: nextstate = DECODE;
             DECODE:begin
                 //result at decode is either 0 or a 1 when true n_nop goes high
                 //decoder puts the feilds into correct thing
                 nextstate = EXECUTE;
                 n_data_rw = Memop;
-                alu_a = decodeA;
-                alu_b = decodeB;
+                // alu_a = decodeA;
+                // alu_b = decodeB;
             end
             EXECUTE:begin
                 //program counter increment by default
                 next_program_counter = fnpcval;
                 nextstate = nsexec;
-                alu_a = execA;
-                alu_b = execB;
+                // alu_a = execA;
+                // alu_b = execB;
                 n_address_dat = naddrdat;
                 //first part of execute will be that this guy takes the A,B AND OPC and feeds it into the alu
                 //states can be skipped
@@ -192,8 +194,8 @@ module core(
                 // end 
                 if(INSopc[6]) n_data_word_IN = loadset;
                  if(INSopc[10])begin
-                    if(instword[31:25] == 7'h01) n_data_word_IN = 2; //ebreak
-                    else n_data_word_IN = 1; // ecall 
+                    if(instword[25]) n_data_word_IN = 32'd2; //ebreak
+                    else n_data_word_IN = 32'd1; // ecall 
                  // n_address_dat = 12'hffc;
                 end 
                     //calling ecall as an nop here 
@@ -245,7 +247,6 @@ module core(
                 //IN this stage only can the registerfile be written
                 //the registerfile can be read in any other states
                 //this is just for WRITING on the registerfile
-            endcase
-        end
+        endcase
         end
 endmodule
