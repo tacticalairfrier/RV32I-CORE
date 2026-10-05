@@ -1,45 +1,44 @@
 # RV32I-CORE
-
+ 
 A multicycle RV32I RISC-V CPU core written in Verilog, built from scratch as a hands-on exercise in computer architecture and RTL design - golden-model-first, with a hand-written C reference model used for differential checking against the RTL.
-
+ 
 > **Status: early bring-up, not verified for general use.** A subset of the instruction set has been exercised against the reference model and confirmed working. The rest of the RV32I opcode map is decoded and implemented in RTL but has not yet been run through a compliance suite or formal tool. See [Verification status](#verification-status) before relying on this core for anything beyond experimentation.
-
+ 
 ## Architecture
-
+ 
 - **Multicycle FSM core.** Every instruction moves through some subset of six states: `RESET → FETCH → DECODE → EXECUTE → MEMORY → WRITEBACK → FETCH`. Simpler instructions (e.g. register-immediate ALU ops) skip `MEMORY`; loads, stores, and branches route through it.
 - **Harvard memory layout.** Separate instruction and data memories, each 4 KB (`ins_mem` / `dat_mem` in `memory.v`).
 - **Little-endian** byte ordering for both instruction fetch and load/store.
-- **31-entry register file** (`registerfile[0:31]`), with `x0` forced to zero on every write.
+- **31-entry register file** Registerfile successfully implemented as Block-Ram on all platforms.
 - Program firmware is loaded into instruction memory via `$readmemh` from `firmware.hex` at elaboration time (simulation-only path).
-
-### Memory word width — synthesizability fix
-
-`ins_mem` / `dat_mem` were originally modeled as byte-wide arrays (one array element per byte, reassembled into 32-bit words on access). That's fine for simulation, but it doesn't map onto FPGA block RAM: BRAM primitives are word-addressed, and a byte-array model forces the synthesis tool into wide, inefficient byte-enable muxing logic instead of inferring a clean BRAM instance — on some toolchains it fails to infer BRAM at all and falls back to distributed/LUT RAM.
-
-Both memories have since been changed to 32-bit wide word arrays, with `firmware.hex` generated for that width using `--verilog-data-width 4` (`objcopy`/`elf2hex`, depending on which is in your flow). This lets the synthesis tool cleanly infer BRAM on both target FPGAs instead of falling back to the byte-array model. Byte-addressed loads/stores (`LB`, `SB`, `SH`) are still supported — the byte/halfword slicing now happens on the read/write path into a word, rather than the memory array itself being byte-granular.
-
+### Memory word width: synthesizability fix
+ 
+`ins_mem` / `dat_mem` were originally modeled as byte-wide arrays (one array element per byte, reassembled into 32-bit words on access). That's fine for simulation, but it doesn't map onto FPGA block RAM: BRAM primitives are word-addressed, and a byte-array model forces the synthesis tool into wide, inefficient byte-enable muxing logic instead of inferring a clean BRAM instance. On some toolchains it fails to infer BRAM at all and falls back to distributed/LUT RAM.
+ 
+Both memories have since been changed to 32-bit wide word arrays, with `firmware.hex` generated for that width using `--verilog-data-width 4` (`objcopy`/`elf2hex`, depending on which is in your flow). This lets the synthesis tool cleanly infer BRAM on both target FPGAs instead of falling back to the byte-array model. Byte-addressed loads/stores (`LB`, `SB`, `SH`) are still supported: the byte/halfword slicing now happens on the read/write path into a word, rather than the memory array itself being byte-granular.
+ 
 If you're regenerating `firmware.hex` from source, make sure your hex-generation step matches this width, or the core will load garbage instructions.
-
+ 
 ### Modules
-
+ 
 | File | Purpose |
 |---|---|
 | `src/core.v` | Top-level multicycle FSM: fetch, decode, execute, memory, writeback |
-| `src/alu.v` | Combinational ALU — add/sub, shifts (logical + arithmetic), compare (signed/unsigned), bitwise ops |
+| `src/alu.v` | Combinational ALU: add/sub, shifts (logical + arithmetic), compare (signed/unsigned), bitwise ops |
 | `src/memory.v` | Instruction + data memory, word-addressed (32-bit wide), byte/halfword access on the load/store path |
-
+ 
 ## Instruction support
-
+ 
 The decoder recognizes the full base opcode map (`LUI`, `AUIPC`, `JAL`, `JALR`, `BRANCH`, `LOAD`, `STORE`, register-immediate and register-register ALU ops, `FENCE`, `ECALL`). `FENCE` and `ECALL` currently decode as no-ops rather than doing anything functional.
-
-`ref/verified_instructions.txt` lists an initial verified set (`lui`, `addi`, `add`, `xor`, `sub`, `and`, `or`, `sw`, `sb`, `sh`, `xori`), but that file hasn't been touched since the first commit — later work (branch conditions, `jalr`) has been tested since without the file being kept in sync, so treat it as a historical snapshot, not the current verified set.
-
+ 
+`ref/verified_instructions.txt` lists an initial verified set (`lui`, `addi`, `add`, `xor`, `sub`, `and`, `or`, `sw`, `sb`, `sh`, `xori`), but that file hasn't been touched since the first commit. Later work (branch conditions, `jalr`) has been tested since without the file being kept in sync, so treat it as a historical snapshot, not the current verified set.
+ 
 There is currently no single up-to-date source of truth for "what's actually verified." That list either needs to be maintained going forward or replaced by a proper regression suite (arch-test / coverage-driven random testing, see below) that doesn't depend on remembering to hand-edit a text file every time something new gets tested.
-
+ 
 **Not implemented:** M extension (mul/div), compressed instructions, CSRs, interrupts/traps, misaligned access handling.
-
+ 
 ## Repo layout
-
+ 
 ```
 src/
   core.v      - FSM core
@@ -48,7 +47,7 @@ src/
   registerfile.v - totally sychronous mirrored register modules
   controller.v  - a decode stage for the core.v 
 test/
-  test_core_basic.v — basic FSM/instruction-stream testbench (waveform dump, no assertions)
+  test_core_basic.v - basic FSM/instruction-stream testbench (waveform dump, no assertions)
   alu_test.v         - ALU-only testbench
   test_mem.v         - memory module testbench
 ref/
@@ -60,86 +59,87 @@ memdump/
   trace.txt       - C reference model's full per-cycle pc/instruction/register trace + final memory image
 firmware.hex  - test program loaded into instruction memory at sim time (32-bit word width, generated with --verilog-data-width 4)
 ```
-
+ 
 ## Running the simulation
-
+ 
 These testbenches are plain Verilog (`$dumpfile`/`$dumpvars`, no UVM/assertion framework), so any standard simulator works. With Icarus Verilog:
-
+ 
 ```bash
 # core testbench
 iverilog -o sim_core src/core.v src/alu.v src/memory.v test/test_core_basic.v
 vvp sim_core
 gtkwave sim.vcd
-
+ 
 # ALU-only testbench
 iverilog -o sim_alu src/alu.v test/alu_test.v
 vvp sim_alu
-
+ 
 # memory-only testbench
 iverilog -o sim_mem src/memory.v test/test_mem.v
 vvp sim_mem
 ```
-
+ 
 `firmware.hex` must be present in the working directory the simulator is run from (`memory.v` loads it via a relative path) - that is the repository root folder. Make sure it was generated at 32-bit word width (`--verilog-data-width 4`); a byte-width hex file will not load correctly into the current memory model.
-
+ 
 ### Assembly → firmware.hex
-
+ 
 Assembly sources are assembled and linked with the RISC-V GCC toolchain
-(bare-metal `rv32i`/`ilp32` target, no linker script — entry point set
+(bare-metal `rv32i`/`ilp32` target, no linker script, entry point set
 directly via `-e _start`), then converted to a Verilog hex file for
 `$readmemh` with `objcopy`:
-
+ 
 ```bash
 riscv64-unknown-elf-as -march=rv32i -mabi=ilp32 file.S -o file.o
 riscv64-unknown-elf-ld -m elf32lriscv -Ttext=0x0 -e _main file.o -o file.elf
 riscv64-unknown-elf-objcopy -O verilog --verilog-data-width 4 file.elf firmware.hex
 ```
-
+ 
 The `--verilog-data-width 4` flag matters because of the memory-width change
 described above: imem/dmem are 32-bit-wide word arrays (not byte arrays), so
 `objcopy` needs to pack 4 bytes per output line to match. Without it,
 `objcopy` emits one byte per line by default, which mismatches the memory's
 word width and either fails `$readmemh` or silently loads garbage into every
 word.
-
+ 
 ## `memdump/`
-
+ 
 Output artifacts from a differential-testing run, used to compare the RTL against the golden C reference model:
-
+ 
 | File | Contents |
 |---|---|
 | `memory.txt` | Word-wise (32-bit) memory dump produced by the **RTL** simulation at the end of a run. Unwritten/unreached locations show as `x` (unknown) rather than a defined value. |
 | `memory_ref.txt` | Word-wise memory dump produced by the **C reference model** (`rv32i_ref.c`) for the same run. This is the file `memory.txt` is diffed against. |
 | `trace.txt` | Full per-cycle execution trace from the **C reference model**: the loaded instruction memory image, followed by, for every retired instruction, the `pc`, the raw instruction word, and a full register-file snapshot after that instruction executes. Ends with the model's final byte-wise memory image. |
-
-`memory.txt` vs `memory_ref.txt` is the actual pass/fail check for a run — a mismatch anywhere means the RTL diverged from the reference model. `trace.txt` is the debug aid for *where* it diverged: the register-file snapshots let you walk instruction-by-instruction through the reference model's execution and compare against the RTL waveform to find the exact cycle where behavior split.
-
+ 
+`memory.txt` vs `memory_ref.txt` is the actual pass/fail check for a run: a mismatch anywhere means the RTL diverged from the reference model. `trace.txt` is the debug aid for *where* it diverged: the register-file snapshots let you walk instruction-by-instruction through the reference model's execution and compare against the RTL waveform to find the exact cycle where behavior split.
+ 
 ## Verification status
-
-This core was built golden-model-first: `ref/rv32i_ref.c` is a hand-written C reference model / ISS, and every instruction that's been exercised so far has been differentially checked against it, not just eyeballed for "looks about right." Correctness so far rests on two legs — waveform inspection from `test_core_basic.v`, and instruction-by-instruction diffing of RTL execution against the reference model, concretely captured in `memdump/`: the RTL's memory dump (`memory.txt`) is compared word-for-word against the reference model's memory dump (`memory_ref.txt`) for the same run, and when the two disagree, the reference model's full per-cycle pc/instruction/register trace (`trace.txt`) is used to pin down the exact instruction where RTL execution diverged from the golden model.
-
-That's real verification, not eyeballing — but it's still bring-up-stage, not
+ 
+This core was built golden-model-first: `ref/rv32i_ref.c` is a hand-written C reference model / ISS, and every instruction that's been exercised so far has been differentially checked against it, not just eyeballed for "looks about right." Correctness so far rests on two legs: waveform inspection from `test_core_basic.v`, and instruction-by-instruction diffing of RTL execution against the reference model, concretely captured in `memdump/`. The RTL's memory dump (`memory.txt`) is compared word-for-word against the reference model's memory dump (`memory_ref.txt`) for the same run, and when the two disagree, the reference model's full per-cycle pc/instruction/register trace (`trace.txt`) is used to pin down the exact instruction where RTL execution diverged from the golden model.
+ 
+That's real verification, not eyeballing, but it's still bring-up-stage, not
 sign-off. The diff-and-trace comparison is currently manual: run the sim,
 generate both dumps, diff them, and consult the trace on mismatch. Coverage
 is informal too - which instructions and operand values have been exercised
 is tracked loosely through commit history, not a maintained record. The next
 steps below close both gaps: scripting the dump/diff into an automatic
 pass/fail check, and making coverage tracking explicit.
-
+ 
 Planned next steps for this repo:
 - Run the [riscv-arch-test](https://github.com/riscv-non-isa/riscv-arch-test) compliance suite against the core
 - Constrained-random instruction generation with functional coverage closure, still diffed against the reference model
 - Formal verification via [riscv-formal](https://github.com/YosysHQ/riscv-formal) (SymbiYosys/Yosys), once an RVFI-compliant retirement interface is added to `core.v`
   
 ## Physical Implementation
-
-Bring-up on real FPGA silicon is underway, targeting two devices:
-`ICE40UP5K` and `XC7A35T-1CPG236C`. The memory-width change above was made
-specifically to get clean BRAM inference on both of these targets.
-
+ 
+Bring-up on real FPGA silicon is underway, targeting three devices:
+`ICE40UP5K`, `XC7A35T-1CPG236C` (Basys3), and the Tang Nano 20K.
+The memory-width change above was made specifically to get clean BRAM
+inference on these targets.
+ 
 ### Bring-up findings (preliminary)
-
-- **Basys3 (XC7A35T-1CPG236C):** 780 LUT6s (up slightly from 772). BRAM
+ 
+- **Basys3 (XC7A35T-1CPG236C):** 842 LUT6s (up from 772). BRAM
   successfully inferred for both imem and dmem. The small increase here
   is expected - Vivado was already aggressively optimizing the old nested
   case statements, so the explicit one-hot decoder gives it less to
@@ -154,6 +154,10 @@ specifically to get clean BRAM inference on both of these targets.
   up significantly. Reworked the register file to map into BRAM on iCE40
   instead, bringing usage down to the figures above. Timing closes at
   20 MHz on iCE40 with this change.
+- **Tang Nano 20K:** 1062 logic cells (995 LUTs + 67 ALUs, 0 ROM16), 6% of
+  the device. 4 BSRAM blocks inferred as SDPB (9%), with no SSRAM (RAM16)
+  used. Full breakdown in the table below. No timing/Fmax figure has been
+  recorded for this target yet.
 - Decode logic reworked from nested case statements to a combinational
   decoder built on one-hot instruction and funct3 encoding, driven by a
   one-hot FSM, with continuous assignments replacing procedural logic
@@ -162,18 +166,38 @@ specifically to get clean BRAM inference on both of these targets.
   it doesn't optimize nested case chains as aggressively as Vivado does.
 - Wrote a small LED-blink program in assembly and tested it on both boards
   (`assembly/blink.asm`).
-
 **Next up:** the nested ternary operations are the last unoptimized piece
 left in the design - planning to remove those next.
-
-Resource utilization, timing closure, and full BRAM inference reports will
-be added here as bring-up progresses.
-
+ 
+### Tang Nano 20K resource utilization
+ 
+Gowin synthesis resource usage summary:
+ 
+| Resource | Usage | Utilization |
+|---|---|---|
+| Logic | 1062 / 20736 | 6% |
+| &nbsp;&nbsp;LUT, ALU, ROM16 | 1062 (995 LUT, 67 ALU, 0 ROM16) | - |
+| &nbsp;&nbsp;SSRAM (RAM16) | 0 | - |
+| Register | 167 / 15750 | 2% |
+| &nbsp;&nbsp;Logic register as latch | 0 / 15552 | 0% |
+| &nbsp;&nbsp;Logic register as FF | 159 / 15552 | 2% |
+| &nbsp;&nbsp;I/O register as latch | 0 / 198 | 0% |
+| &nbsp;&nbsp;I/O register as FF | 8 / 198 | 5% |
+| CLS | 615 / 10368 | 6% |
+| I/O port | 10 / 66 | 16% |
+| &nbsp;&nbsp;Input buf | 2 | - |
+| &nbsp;&nbsp;Output buf | 8 | - |
+| &nbsp;&nbsp;Inout buf | 0 | - |
+| BSRAM | 4 SDPB | 9% |
+ 
+Resource utilization, timing closure, and full BRAM inference reports for
+the remaining targets will be added here as bring-up progresses.
+ 
 ### iCE40 top-level and build flow (`ice40up50k/`)
-
+ 
 FPGA-specific top module and build artifacts for the iCE40 target live in
 `ice40up50k/`:
-
+ 
 - `ice40up50k/top.v` - top-level wrapper instantiating the core, wiring
   clock/reset and board I/O (LEDs, etc.) for the iCE40UP5K target.
 - `ice40up50k/Makefile` - drives synthesis (`yosys`), place-and-route
@@ -184,12 +208,11 @@ FPGA-specific top module and build artifacts for the iCE40 target live in
   for this target's build.
   
 ## What I've learnt
-
+ 
 1. Even a basic, minimal implementation gives real insight into computer architecture - decisions that look trivial on paper (like memory array width) have concrete synthesis consequences.
 2. Hands-on experience with the RISC-V ISA and its associated build/toolchain ecosystem.
 3. In-depth, practical experience with computer architecture and instruction set design.
 4. Hands-on experience with RV32I assembly.
-
 ## License
-
+ 
 MIT - see `LICENSE`.
