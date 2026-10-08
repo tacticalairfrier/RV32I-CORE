@@ -83,14 +83,19 @@ initial begin
     $dumpvars(0,RV32I_00.REG_0.registerfile_rs2[30]);
     $dumpvars(0,RV32I_00.REG_0.registerfile_rs1[31]);
     $dumpvars(0,RV32I_00.REG_0.registerfile_rs2[31]);
-    for(i=0;i<40;i=i+1)begin
-        $dumpvars(0, RV32I_00.MEM_0.dat_mem[i]);
+    for(i=0;i<80;i=i+1)begin
+        $dumpvars(0, RV32I_00.MEM_0.MEMBANK.bank0.mem[i]);
     end
+    for(i=0;i<80;i=i+1)begin
+        $dumpvars(0, RV32I_00.MEM_0.MEMBANK.bank1.mem[i]);
+    end
+    $dumpvars(0, RV32I_00.MEM_0.MEMBANK.bank1.mem['h120]);
+    $dumpvars(0, RV32I_00.MEM_0.MEMBANK.bank0.mem['h120]);
     j = $fopen("test/memory.txt", "w");
-    #6600;
+    #40000;
     //dumping the first 80 memory addresses directly into memory.txt
-    for(i=0;i<20;i=i+1)begin
-        $fdisplay(j,"%h",RV32I_00.MEM_0.dat_mem[i]);
+    for(i=0;i<80;i=i+1)begin
+        $fdisplay(j,"%h",{RV32I_00.MEM_0.MEMBANK.bank1.mem[i],RV32I_00.MEM_0.MEMBANK.bank0.mem[i]});
     end
     $fclose(j);
     $finish;

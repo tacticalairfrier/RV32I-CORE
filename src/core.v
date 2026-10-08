@@ -1,4 +1,5 @@
 //core module for riscv multicycle core
+`include "config.vh"
 `default_nettype none
 `define TRUE 1'b1
 `define FALSE 1'b0
@@ -47,6 +48,7 @@ module core(
     //
     wire [31:0] offset, loadset, storeset, branchdest;
     wire [10:0] INSopc;
+    wire [2:0] storetype, storeloadec;
     wire [3:0] ALUopc;
     wire [1:0] Memop;
     //
@@ -98,7 +100,9 @@ module core(
         .instword(curr_inst),
         .datwordout(data_word_OUT),
         .gpio_in({24'h0000000, gpio_core_in}),
-        .gpio_out(gpio_core_out_wire)
+        .gpio_out(gpio_core_out_wire),
+        .storeloadec(storeloadec),
+        .storetype(storetype)
     );
     alu ALU_0 (
         .oper_a(aluA),
@@ -129,7 +133,9 @@ module core(
         .dataRW(Memop),
         .INSopc(INSopc),
         .Memread(data_word_OUT),
-        .storeset(storeset)
+        .storeset(storeset),
+        .storetype(storetype),
+        .storeloadec(storeloadec)
     );
     //fsm
     always@(posedge clkin)begin
