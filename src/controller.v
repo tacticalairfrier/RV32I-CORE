@@ -6,6 +6,7 @@ module controller(
     output wire [31:0] offset, loadset, branchdest, storeset,
     output wire [10:0] INSopc,
     output wire [3:0] ALUopc,
+    output wire [2:0] storetype, storeloadec,
     output wire [1:0] dataRW,
     input wire [31:0] rs2_src, Memread,
     input wire [31:0] instword,
@@ -15,17 +16,17 @@ module controller(
     //controller module intentionally stays purely combinational
     //copying over the localparams from the core.v module
     // localparam DECODE = 3'd1, EXECUTE = 3'd2;
-    localparam SLL = 4'h8, 
-        SRR =  4'h9, 
-        SRA =  4'ha, 
-        EQL =  4'hb, 
-        SLT =  4'hc, 
-        SLTU = 4'hd, 
-        ADD =  4'h7, 
-        SUB =  4'h6, 
-        AND =  4'h5, 
-        OR =   4'h4, 
-        XOR =  4'h3;
+    localparam  SLL =  4'h8, 
+                SRR =  4'h9, 
+                SRA =  4'ha, 
+                EQL =  4'hb, 
+                SLT =  4'hc, 
+                SLTU = 4'hd, 
+                ADD =  4'h7, 
+                SUB =  4'h6, 
+                AND =  4'h5, 
+                OR =   4'h4, 
+                XOR =  4'h3;
     localparam  LUI      = 5'b01101,
                 AUIPC    = 5'b00101, 
                 JAL      = 5'b11011, 
@@ -55,6 +56,7 @@ module controller(
     assign zerologic[5] = (funct3 == 3'b101);
     assign zerologic[6] = (funct3 == 3'b110);
     assign zerologic[7] = (funct3 == 3'b111);
+    assign storetype = zerologic[2:0]; //2 means sw, 1 means sh, 0 means sb
     //instruction type decoded -> r,i,s,b,u,j ->
     // wire [5:0] INSopc;
     // assign INSopc[0] = (opcode == ARM_RR); //r
@@ -63,18 +65,20 @@ module controller(
     // assign INSopc[3] = (opcode == BRANCH); //b
     // assign INSopc[4] = ((opcode == LUI)||(opcode == AUIPC)); //u
     // assign INSopc[5] = (opcode == JAL); //j
-    assign INSopc[0] = (opcode == LUI); //u
-    assign INSopc[1] = (opcode == AUIPC); //u
-    assign INSopc[2] = (opcode == JAL); //j
-    assign INSopc[3] = (opcode == JALR); //i
-    assign INSopc[4] = (opcode == BRANCH); //b
-    assign INSopc[5] = (opcode == LOAD); //i
-    assign INSopc[6] = (opcode == STORE); //s
-    assign INSopc[7] = (opcode == ARM_IMM); //i
-    assign INSopc[8] = (opcode == ARM_RR); //r
-    assign INSopc[9] = (opcode == FEN); //
+    assign INSopc[0]  = (opcode == LUI); //u
+    assign INSopc[1]  = (opcode == AUIPC); //u
+    assign INSopc[2]  = (opcode == JAL); //j
+    assign INSopc[3]  = (opcode == JALR); //i
+    assign INSopc[4]  = (opcode == BRANCH); //b
+    assign INSopc[5]  = (opcode == LOAD); //i
+    assign INSopc[6]  = (opcode == STORE); //s
+    assign INSopc[7]  = (opcode == ARM_IMM); //i
+    assign INSopc[8]  = (opcode == ARM_RR); //r
+    assign INSopc[9]  = (opcode == FEN); //
     assign INSopc[10] = (opcode == EC); // 
+    assign storeloadec = {INSopc[6:5], INSopc[10]}; //2 means store, 1 means load and 0 means ec
     //arithmetic instruction decode
+    //redundant logic but needs to be corrected
     assign dataRW[0] = INSopc[6]|INSopc[10];
     assign dataRW[1] = INSopc[5];
     wire [1:0] arithcode;
