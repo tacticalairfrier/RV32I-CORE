@@ -53,11 +53,13 @@ assign memcode = {address_dat[16], address_dat[2], dat_rw};
 assign gpio_out = gpio_mmio_out;
 assign datwordout = (memcode == 4'b0010||memcode == 4'b0110)?(mem_write_wire):(gpio_write_reg);
 assign rw_correct = (memcode == 4'b0001||memcode == 4'b0101);
-`elsif TARGET_SIM_GW2AR_LV18QN88_I7 //tang nano 2k sim target 
-`elsif TARGET_GW2AR_LV18QN88_I7 //tang nano 20k target
-`elsif TARGET_GENERIC //general fpga target
-`else // general purpose fpga bram inferrence
-`endif
+`endif 
+`ifdef TARGET_GENERIC
+assign memcode = {address_dat[14], address_dat[2], dat_rw};
+assign gpio_out = gpio_mmio_out;
+assign datwordout = (memcode == 4'b0010||memcode == 4'b0110)?(mem_write_wire):(gpio_write_reg);
+assign rw_correct = (memcode == 4'b0001||memcode == 4'b0101);
+`endif 
 //map 0x0000->0x0fff = general data, 0x1000->0x1004 = gpio_in, gpio_out 
 //putting the firmware inside the ins_mem
 //not possible in asic only for yosys/vivado
