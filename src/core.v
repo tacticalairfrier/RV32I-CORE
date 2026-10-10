@@ -1,5 +1,5 @@
 //core module for riscv multicycle core
-`include "config.vh"
+`include "config.v"
 `default_nettype none
 `define TRUE 1'b1
 `define FALSE 1'b0
@@ -15,16 +15,7 @@ module core(
     );
     //5 Stages of the classic risc pipeline taken as states in an fsm
     //uses one hot fsm encoding instead of binary fsm encoding
-    // localparam FETCH = 3'd0, DECODE = 3'd1, EXECUTE = 3'd2, MEMORY = 3'd3, WRITEBACK = 3'D4, RESET = 3'd5;
     localparam FETCH = 6'b000001, DECODE = 6'b000010, EXECUTE = 6'b000100, MEMORY = 6'b001000, WRITEBACK = 6'b010000, RESET = 6'b100000;
-    //localparam for opcodes of the alu
-    // localparam SLL = 4'h8, SRR = 4'h9, SRA = 4'ha, EQL = 4'hb, SLT = 4'hc, SLTU = 4'hd, ADD = 4'h7, SUB = 4'h6, AND = 4'h5, OR = 4'h4, XOR = 4'h3;
-    // //localparams for the riscv standard opcodes
-    // localparam LUI = 7'h37, AUIPC = 7'h17, JAL = 7'h6f, JALR = 7'h67, BRANCH = 7'h63, LOAD = 7'h03, STORE = 7'h23, ARM_IMM = 7'h13, ARM_RR = 7'h33, FEN = 7'h0f, EC = 7'h73;
-    //fsm operator regs
-    //alu oper_a is always rs1, and oper_b is always rs2
-    //the registerfile for the core, 32 bits wide, 31 deep 0x0 will be tied to 0
-    // reg [31:0] registerfile [0:31];
     reg [31:0] program_counter, next_program_counter;
     reg [31:0] result;
     //memory interface
@@ -45,13 +36,11 @@ module core(
     wire [31:0] rs1_latch, rs2_latch;
     wire [4:0] rs1, rs2, rd;
     wire read_enable, write_enable;
-    //
     wire [31:0] offset, loadset, storeset, branchdest;
     wire [10:0] INSopc;
     wire [2:0] storetype, storeloadec;
     wire [3:0] ALUopc;
     wire [1:0] Memop;
-    //
     // the outside world's window into the cpu
     assign gpio_core_out = gpio_core_out_wire[7:0];
     assign rs2 = instword[24:20];
@@ -142,9 +131,6 @@ module core(
         if(!reset)begin
             program_counter <= 32'h0;
             state <= RESET;
-            // instword <= 32'h00000000;
-            // registerfile [0] <= 32'h00000000;
-            // nop  <= `FALSE;
         end
         else begin
             state <= nextstate;
@@ -194,19 +180,12 @@ module core(
                 //states can be skipped
                 //the important constraint of the multicycle approach is to use the alu exactly once per state
                 //as long as a b and opcode are kept the same, the result will be same
-                // LOAD:begin
-                //     // next_program_counter = result;
-                //     n_address_dat = naddrdat;
-                // end 
                 if(INSopc[6]) n_data_word_IN = loadset;
-                 if(INSopc[10])begin
+                if(INSopc[10])begin
                     if(instword[25]) n_data_word_IN = 32'd2; //ebreak
                     else n_data_word_IN = 32'd1; // ecall 
                  // n_address_dat = 12'hffc;
                 end 
-                    //calling ecall as an nop here 
-                    //will need to add some functionality
-                    //second use of the alu
                 //Initial part of decode is done 
                 //some operations need the alu more than once i.e first for shifting to the left and then calculating the rd 
                 //program counter next updated here
@@ -227,32 +206,7 @@ module core(
             WRITEBACK:begin
                 nextstate = FETCH;
                 return_dest = writebackwrite;
-                // write_enable = `TRUE;
-                // case(instword[6:0]) //writeback needs to be heavily optimised
-                //     LUI: return_dest = offset;
-                //     AUIPC: return_dest = result;
-                //     JAL: return_dest = result;
-                //     JALR: return_dest = result;
-                //     LOAD: begin
-                //         // case(instword[14:12])
-                //         // 3'h0: return_dest = {{24{data_word_OUT[7]}}, data_word_OUT[7:0]};
-                //         // 3'h1: return_dest = {{16{data_word_OUT[15]}}, data_word_OUT[15:0]};
-                //         // 3'h2: return_dest = data_word_OUT;
-                //         // 3'h4: return_dest = {24'h000000, data_word_OUT[7:0]};
-                //         // 3'h5: return_dest = {16'h0000, data_word_OUT[15:0]};
-                //         // endcase
-                //         return_dest = storeset;
-                //     end
-                //     ARM_IMM: return_dest = result;
-                //     ARM_RR: return_dest = result;
-                //     default: write_enable = `FALSE;
-                // endcase
             end
-                //alu use will not happen in the writeback and memory state
-                //registerfile always stays synced to the clock posedge and thus stays syncronous
-                //IN this stage only can the registerfile be written
-                //the registerfile can be read in any other states
-                //this is just for WRITING on the registerfile
         endcase
         end
 endmodule
